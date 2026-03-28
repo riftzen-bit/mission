@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Verify python3 available
+        shell: bash
+        run: python3 --version
+
+      - name: Run phase-guard tests
+        shell: bash
+        run: bash tests/phase-guard.test.sh
+
+      - name: Run mission-continue tests
+        shell: bash
+        run: bash tests/mission-continue.test.sh

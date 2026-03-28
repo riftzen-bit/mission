@@ -235,9 +235,10 @@ canonicalize_path() {
 import os,sys
 p = sys.argv[1]
 if os.path.exists(p) or os.path.islink(p):
-    print(os.path.realpath(p))
+    r = os.path.realpath(p)
 else:
-    print(os.path.normpath(p))
+    r = os.path.normpath(p)
+print(r.replace(chr(92), "/"))
 ' "$filepath" 2>/dev/null || echo "$filepath"
 }
 
