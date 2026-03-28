@@ -614,8 +614,8 @@ Archived:
 
 | Scenario | Handling |
 |----------|----------|
-| Session crash during mission | `.mission/state.json` persists. Next `/enter-mission` detects it and offers resume. |
-| User types `/exit-mission` mid-work | Mission stops. State saved. Can resume later. |
+| Session crash during mission | `.mission/state.json` persists. Next `/enter-mission` detects it and offers resume. (Changed in v0.4.0: directory is deleted on completion/exit; `/enter-mission` now deletes any stale `.mission/` and starts fresh.) |
+| User types `/exit-mission` mid-work | Mission stops. State saved. Can resume later. (Changed in v0.4.0: directory is deleted on exit; state is not preserved after `/exit-mission`.) |
 | User intervenes with a message | Orchestrator (main session) handles it. Can adjust plan, add requirements, change direction. |
 | Worker encounters an error it cannot fix | Worker logs the error in its output. Orchestrator reads it and decides: retry, re-scope, or escalate to user. |
 | Validator finds 0 issues | Validator must provide detailed evidence of thorough checking. Orchestrator reviews the evidence before accepting. |

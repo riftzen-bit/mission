@@ -3,16 +3,17 @@
   "name": "mission",
   "description": "Strict 3-role orchestration plugin — Orchestrator, Worker, Validator with hard hook enforcement",
   "owner": {
-    "name": "Paul"
+    "name": "Paul",
+    "email": "riftzen-bit@users.noreply.github.com"
   },
   "plugins": [
     {
       "name": "mission",
       "source": "./",
-      "description": "3-role orchestration with strict isolation and PreToolUse hooks enforcement",
-      "version": "0.1.0",
+      "description": "3-role orchestration with strict phase isolation, auto-continuation, and security-hardened hooks",
+      "version": "0.4.0",
       "category": "workflow",
-      "tags": ["orchestration", "agents", "hooks", "tdd", "validation"],
+      "tags": ["orchestration", "agents", "hooks", "tdd", "validation", "mission-mode"],
       "license": "MIT"
     }
   ]
