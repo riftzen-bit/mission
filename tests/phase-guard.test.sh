@@ -214,37 +214,43 @@ assert_blocked "Validator: Write source via traversal" "Write" '{"file_path":"te
 assert_allowed "Validator: Write test file via normalized path" "Write" '{"file_path":"src/../tests/test_main.py"}'
 
 # ─────────────────────────────────────────────
-# TEST GROUP: Symlink attacks
+# TEST GROUP: Symlink attacks (skip on Windows — symlinks require special permissions)
 # ─────────────────────────────────────────────
 echo ""
-echo "--- Symlink attacks ---"
+if ln -sf "$TEST_DIR/.mission" "$TEST_DIR/__symlink_test__" 2>/dev/null && [ -L "$TEST_DIR/__symlink_test__" ]; then
+  rm -f "$TEST_DIR/__symlink_test__"
+  echo "--- Symlink attacks ---"
 
-# Worker: symlink to .mission/state.json → BLOCK
-create_state "worker"
-ln -sf "$TEST_DIR/.mission/state.json" "$TEST_DIR/innocent-link"
-assert_blocked "Worker: Write via symlink to .mission/state.json → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/innocent-link\"}"
-rm -f "$TEST_DIR/innocent-link"
+  # Worker: symlink to .mission/state.json → BLOCK
+  create_state "worker"
+  ln -sf "$TEST_DIR/.mission/state.json" "$TEST_DIR/innocent-link"
+  assert_blocked "Worker: Write via symlink to .mission/state.json → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/innocent-link\"}"
+  rm -f "$TEST_DIR/innocent-link"
 
-# Worker: symlink to .mission/plan.md → BLOCK
-create_state "worker"
-ln -sf "$TEST_DIR/.mission/plan.md" "$TEST_DIR/fake-source.ts"
-echo "# plan" > "$TEST_DIR/.mission/plan.md"
-assert_blocked "Worker: Write via symlink to .mission/plan.md → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/fake-source.ts\"}"
-rm -f "$TEST_DIR/fake-source.ts"
+  # Worker: symlink to .mission/plan.md → BLOCK
+  create_state "worker"
+  ln -sf "$TEST_DIR/.mission/plan.md" "$TEST_DIR/fake-source.ts"
+  echo "# plan" > "$TEST_DIR/.mission/plan.md"
+  assert_blocked "Worker: Write via symlink to .mission/plan.md → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/fake-source.ts\"}"
+  rm -f "$TEST_DIR/fake-source.ts"
 
-# Validator: symlink to source file → BLOCK
-create_state "validator"
-echo "source" > "$TEST_DIR/src-file.ts"
-ln -sf "$TEST_DIR/src-file.ts" "$TEST_DIR/fake-test.test.ts"
-assert_blocked "Validator: Write via symlink to source file (disguised as test) → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/fake-test.test.ts\"}"
-rm -f "$TEST_DIR/fake-test.test.ts" "$TEST_DIR/src-file.ts"
+  # Validator: symlink to source file → BLOCK
+  create_state "validator"
+  echo "source" > "$TEST_DIR/src-file.ts"
+  ln -sf "$TEST_DIR/src-file.ts" "$TEST_DIR/fake-test.test.ts"
+  assert_blocked "Validator: Write via symlink to source file (disguised as test) → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/fake-test.test.ts\"}"
+  rm -f "$TEST_DIR/fake-test.test.ts" "$TEST_DIR/src-file.ts"
 
-# Worker: symlink to .mission/reports → BLOCK
-create_state "worker"
-mkdir -p "$TEST_DIR/.mission/reports"
-ln -sf "$TEST_DIR/.mission/reports/round-1.md" "$TEST_DIR/my-notes.md"
-assert_blocked "Worker: Write via symlink to .mission/reports/ → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/my-notes.md\"}"
-rm -f "$TEST_DIR/my-notes.md"
+  # Worker: symlink to .mission/reports → BLOCK
+  create_state "worker"
+  mkdir -p "$TEST_DIR/.mission/reports"
+  ln -sf "$TEST_DIR/.mission/reports/round-1.md" "$TEST_DIR/my-notes.md"
+  assert_blocked "Worker: Write via symlink to .mission/reports/ → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/my-notes.md\"}"
+  rm -f "$TEST_DIR/my-notes.md"
+else
+  rm -f "$TEST_DIR/__symlink_test__"
+  echo "--- Symlink attacks (SKIPPED — symlinks not supported on this platform) ---"
+fi
 
 # ─────────────────────────────────────────────
 # TEST GROUP: Bug fixes regression
