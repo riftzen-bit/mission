@@ -218,7 +218,7 @@ assert_allowed "Validator: Write test file via normalized path" "Write" '{"file_
 # ─────────────────────────────────────────────
 echo ""
 if ln -sf "$TEST_DIR/.mission" "$TEST_DIR/__symlink_test__" 2>/dev/null && [ -L "$TEST_DIR/__symlink_test__" ]; then
-  rm -f "$TEST_DIR/__symlink_test__"
+  rm -rf "$TEST_DIR/__symlink_test__"
   echo "--- Symlink attacks ---"
 
   # Worker: symlink to .mission/state.json → BLOCK
@@ -248,7 +248,7 @@ if ln -sf "$TEST_DIR/.mission" "$TEST_DIR/__symlink_test__" 2>/dev/null && [ -L 
   assert_blocked "Worker: Write via symlink to .mission/reports/ → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/my-notes.md\"}"
   rm -f "$TEST_DIR/my-notes.md"
 else
-  rm -f "$TEST_DIR/__symlink_test__"
+  rm -rf "$TEST_DIR/__symlink_test__"
   echo "--- Symlink attacks (SKIPPED — symlinks not supported on this platform) ---"
 fi
 
