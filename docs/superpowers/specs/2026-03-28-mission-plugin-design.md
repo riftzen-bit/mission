@@ -98,24 +98,24 @@ mission/
 name: mission-orchestrator
 description: "Mission Orchestrator — plan, delegate, review. NEVER writes code."
 model: claude-opus-4-6
-disallowedTools: Write, Edit
 ---
 ```
 
+Note: Orchestrator does NOT use `disallowedTools` because it needs `Write` to manage `.mission/` state files (plan.md, state.json, summary.md). Instead, hooks enforce that Orchestrator can ONLY write to `.mission/*` paths — never to project source files.
+
 **Responsibilities:**
 - Read codebase thoroughly before planning
-- Create detailed plan with sub-tasks for Workers
-- Dispatch Worker agents (one per sub-task or grouped)
-- Remain SILENT while Workers are active
-- Dispatch Validator agents after Workers complete
-- Remain SILENT while Validators are active
-- Read Validator reports and decide next action
+- Create detailed plan with sub-tasks for Workers (write to `.mission/plan.md`)
+- Update `.mission/state.json` for phase transitions
+- Dispatch Worker agents (one per sub-task or grouped) via Agent tool
+- Block on Agent tool calls — the Orchestrator is NOT suspended during Worker/Validator phases. It invokes Agent tool calls which are synchronous (blocking). The Orchestrator simply waits for the Agent tool to return. "SILENT" means the Orchestrator does not produce output or take other actions while waiting — it is blocked on the Agent call.
+- After all Workers return → write phase transition to state.json → dispatch Validators
+- After all Validators return → read report → decide next action
 - Force incomplete roles to finish before cleanup
 - Clean up `.mission/` only when 100% complete
 
 **Forbidden:**
-- Write or Edit any file (enforced by `disallowedTools` + hooks)
-- Intervene while Workers or Validators are active
+- Write or Edit any project source file (enforced by hooks — only `.mission/*` writes allowed)
 - Clean up before all checks pass
 - Skip reading codebase before planning
 
@@ -251,7 +251,7 @@ IDLE → ORCHESTRATOR → WORKER → VALIDATOR → ORCHESTRATOR → ... → COMP
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|Agent",
+        "matcher": "Write|Edit|Agent|Bash",
         "hooks": [
           {
             "type": "command",
@@ -264,7 +264,7 @@ IDLE → ORCHESTRATOR → WORKER → VALIDATOR → ORCHESTRATOR → ... → COMP
 }
 ```
 
-The hook only fires for `Write`, `Edit`, and `Agent` tool calls. `Read`, `Grep`, `Glob`, and `Bash` are always allowed (all roles can read and search).
+The hook fires for `Write`, `Edit`, `Agent`, and `Bash` tool calls. `Read`, `Grep`, and `Glob` are always allowed (all roles can read and search). `Bash` is guarded to prevent Workers from running test commands (Validator's job).
 
 ### Phase Guard Rules
 
@@ -272,8 +272,11 @@ The hook only fires for `Write`, `Edit`, and `Agent` tool calls. `Read`, `Grep`,
 
 | Tool | Action |
 |------|--------|
-| `Write` (any target) | BLOCK — "Orchestrator cannot write files. Dispatch Workers." |
-| `Edit` (any target) | BLOCK — "Orchestrator cannot edit files. Dispatch Workers." |
+| `Write` to `.mission/*` | ALLOW — Orchestrator manages mission state files |
+| `Write` to any other path | BLOCK — "Orchestrator cannot write source files. Dispatch Workers." |
+| `Edit` to `.mission/*` | ALLOW |
+| `Edit` to any other path | BLOCK — "Orchestrator cannot edit source files. Dispatch Workers." |
+| `Bash` | ALLOW — Orchestrator can run read-only commands (git log, ls, find) |
 | `Agent` with worker/validator subagent | ALLOW |
 | `Agent` with other subagent types | ALLOW |
 
@@ -282,9 +285,13 @@ The hook only fires for `Write`, `Edit`, and `Agent` tool calls. `Read`, `Grep`,
 | Tool | Action |
 |------|--------|
 | `Write` to `.mission/state.json` | BLOCK — "Workers cannot modify mission state." |
+| `Write` to `.mission/worker-logs/*` | ALLOW — Workers log their output |
 | `Write` to any other file | ALLOW |
 | `Edit` to `.mission/state.json` | BLOCK |
+| `Edit` to `.mission/worker-logs/*` | ALLOW |
 | `Edit` to any other file | ALLOW |
+| `Bash` command starting with `npm test`, `npx jest`, `npx vitest`, `npx mocha`, `yarn test`, `pnpm test`, `pytest`, `python -m pytest`, `go test`, `cargo test`, `make test`, `gradle test`, `mvn test`, `bundle exec rspec`, `phpunit` | BLOCK — "Workers cannot run tests. That is the Validator's job." |
+| `Bash` other commands (build, compile, install, format, etc.) | ALLOW — Workers can run non-test commands. The guard matches command prefixes, not arbitrary substrings, so commands like `mkdir test-fixtures` or `npm install @testing-library/react` are allowed. |
 | `Agent` with "validator" in subagent_type | BLOCK — "Workers cannot spawn Validators." |
 | `Agent` with "worker" in subagent_type | ALLOW (sub-workers) |
 | `Agent` with other subagent types | ALLOW |
@@ -293,10 +300,11 @@ The hook only fires for `Write`, `Edit`, and `Agent` tool calls. `Read`, `Grep`,
 
 | Tool | Action |
 |------|--------|
-| `Write` to files matching `*test*`, `*spec*`, `*__tests__*`, `.mission/reports/*` | ALLOW |
+| `Write` to files matching `*.test.*`, `*.spec.*`, `*_test.*`, `*_spec.*`, `__tests__/*`, `.mission/reports/*` | ALLOW |
 | `Write` to any other file | BLOCK — "Validators can only write test files and reports." |
-| `Edit` to files matching `*test*`, `*spec*`, `*__tests__*`, `.mission/reports/*` | ALLOW |
+| `Edit` to files matching `*.test.*`, `*.spec.*`, `*_test.*`, `*_spec.*`, `__tests__/*`, `.mission/reports/*` | ALLOW |
 | `Edit` to any other file | BLOCK |
+| `Bash` | ALLOW — Validators run tests, build, lint, typecheck |
 | `Agent` with "worker" in subagent_type | BLOCK — "Validators cannot spawn Workers." |
 | `Agent` with "validator" in subagent_type | ALLOW (sub-validators) |
 | `Agent` with other subagent types | ALLOW |
@@ -305,12 +313,29 @@ The hook only fires for `Write`, `Edit`, and `Agent` tool calls. `Read`, `Grep`,
 
 If `.mission/state.json` does not exist or `"active": false`, the hook exits immediately with code 0 (pass-through). The plugin has zero impact when not in mission mode.
 
-## 7. Commands
+## 7. Skill Prompt — How Main Session Becomes Orchestrator
 
-### 7.1 `/enter-mission [task]`
+When `/enter-mission` is invoked, the `skills/enter-mission/SKILL.md` content is injected into the main Claude Code session. This skill prompt transforms the session into the Orchestrator role. The skill prompt contains:
+
+1. **Role declaration** — "You are now the Mission Orchestrator. Your ONLY job is to plan, delegate, and review."
+2. **Forbidden actions** — "You MUST NOT use Write or Edit on any file outside `.mission/`. Hooks will block you if you try."
+3. **Mandatory read checklist** — The full Orchestrator Read Checklist from Section 12, embedded directly.
+4. **Phase flow instructions** — Step-by-step instructions for the Orchestrator phase sequence (plan → dispatch workers → wait → dispatch validators → wait → review → loop).
+5. **Agent dispatch templates** — Exact patterns for spawning Workers and Validators via the Agent tool, including the model from config and the full role prompt to inject into each subagent.
+6. **State management instructions** — How to create/update `.mission/state.json`, `.mission/plan.md`, and manage phase transitions.
+7. **Completion gate** — The full completion checklist and cleanup rules.
+8. **User intervention handling** — How to process user messages mid-mission (adjust plan, add requirements, change direction).
+
+The skill prompt does NOT contain Worker or Validator instructions — those live in `agents/worker.md` and `agents/validator.md` respectively. The Orchestrator references these agent files when spawning subagents via the Agent tool.
+
+## 8. Commands
+
+### 8.1 `/enter-mission [task]`
 
 1. Check for existing `.mission/state.json`:
    - If exists and `active: true` → ask user: "Mission in progress. Resume or start fresh?"
+   - **Resume behavior:** Re-read `state.json` to determine last completed phase. If phase was "worker" with some workers completed and some not, re-dispatch only incomplete workers. If phase was "validator", re-dispatch validator. If phase was "orchestrator", continue from where the plan left off. Partial file writes from crashed workers are detected by comparing worker-logs (what was claimed done) against actual file state (what actually exists).
+   - **Start fresh:** Delete existing `.mission/` directory and create new.
    - If not exists or `active: false` → create new
 2. Read global config from `~/.mission/config.json`
 3. Create `.mission/` directory with `state.json`, empty `reports/`, empty `worker-logs/`
@@ -318,14 +343,14 @@ If `.mission/state.json` does not exist or `"active": false`, the hook exits imm
 5. If no task → ask user "What would you like to build?"
 6. Inject Orchestrator skill prompt → main session becomes Orchestrator
 
-### 7.2 `/exit-mission`
+### 8.2 `/exit-mission`
 
 1. Read `.mission/state.json`
 2. Set `active: false`, write `endedAt` timestamp
 3. Output final summary (rounds, files, tests, duration)
 4. Hooks auto-deactivate (check `active` field)
 
-### 7.3 `/mission-config`
+### 8.3 `/mission-config`
 
 **Storage:** `~/.mission/config.json` (global, persists across projects and sessions)
 
@@ -344,7 +369,7 @@ If `.mission/state.json` does not exist or `"active": false`, the hook exits imm
     "validator": "high"
   },
   "maxRounds": 10,
-  "autoCommit": false
+  "maxDurationMinutes": 120
 }
 ```
 
@@ -363,11 +388,13 @@ If `.mission/state.json` does not exist or `"active": false`, the hook exits imm
 - Model: must be `opus`, `sonnet`, or `haiku`
 - Effort: must be `low`, `medium`, `high`, or `max`
 - maxRounds: integer 1-50
-- autoCommit: boolean
+- maxDurationMinutes: integer 10-480
 
 Invalid values → clear error message, config not applied.
 
-### 7.4 `/mission-status`
+**Effort mapping:** The `effort` config maps directly to Claude Code's `effortLevel` setting per-agent. Values correspond to Claude Code's native effort levels: `low` (fast, minimal reasoning), `medium` (balanced), `high` (comprehensive with extended thinking), `max` (maximum capability with deepest reasoning, Opus 4.6 only). When spawning a Worker or Validator agent, the Orchestrator passes the configured effort level via the Agent tool's model parameter combined with runtime effort instructions in the agent prompt.
+
+### 8.4 `/mission-status`
 
 Reads `.mission/state.json` and displays:
 - Current phase and round
@@ -376,7 +403,7 @@ Reads `.mission/state.json` and displays:
 - Latest validator report summary
 - Duration since mission start
 
-## 8. Mission Flow — End to End
+## 9. Mission Flow — End to End
 
 ### Phase 1: ORCHESTRATOR — Plan
 
@@ -436,9 +463,11 @@ Reads `.mission/state.json` and displays:
     - Known limitations
 
 [2.4] HANDOFF
-  - All Workers complete → Orchestrator transitions to Validator phase
-  - Orchestrator dispatches Validators
-  - Orchestrator goes SILENT
+  - The Agent tool in Claude Code is synchronous — each Agent call blocks until the subagent returns.
+  - For parallel Workers: Orchestrator issues multiple Agent tool calls in a single message. Claude Code executes them concurrently and returns all results together.
+  - For sequential Workers: Orchestrator issues Agent calls one at a time, each blocking until complete.
+  - Once all Agent calls return → Orchestrator writes phase transition to .mission/state.json → dispatches Validators via new Agent calls.
+  - "Orchestrator goes SILENT" means the Orchestrator is blocked waiting on Agent tool calls — it does not produce output or take actions until the calls return.
 ```
 
 ### Phase 3: VALIDATOR — Verify
@@ -515,7 +544,7 @@ Reads `.mission/state.json` and displays:
   - User intervenes → Orchestrator handles
 ```
 
-## 9. Mission Completion & Cleanup
+## 10. Mission Completion & Cleanup
 
 ### Completion Checklist — ALL must be TRUE
 
@@ -581,7 +610,7 @@ Archived:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-## 10. Edge Cases
+## 11. Edge Cases
 
 | Scenario | Handling |
 |----------|----------|
@@ -592,11 +621,13 @@ Archived:
 | Validator finds 0 issues | Validator must provide detailed evidence of thorough checking. Orchestrator reviews the evidence before accepting. |
 | Same issue persists 3+ rounds | Orchestrator escalates to user with full context. |
 | maxRounds exceeded | Mission pauses. User informed with summary of remaining issues. |
-| No test framework in project | Validator detects this and installs/configures one before writing tests. |
+| No test framework in project | Validator detects this and reports it as a CRITICAL issue. Orchestrator then dispatches a Worker to install and configure the test framework. Validator re-runs after framework is set up. Validators CANNOT install frameworks themselves (that would modify source config files like package.json). |
 | Project has no build/lint tools | Validator notes this in report. Orchestrator can dispatch Worker to set up tooling. |
 | Multiple Workers modify same file | Orchestrator prevents this by assigning non-overlapping file ownership in the plan. If conflict detected, Orchestrator re-assigns. |
+| Mission exceeds maxDurationMinutes | Mission pauses. User informed with elapsed time, current phase, and remaining work summary. User can extend duration via `/mission-config maxDurationMinutes=240` and resume, or `/exit-mission` to stop. |
+| Sub-workers/sub-validators spawned | Sub-workers inherit the parent Worker's log file — they append to the same `.mission/worker-logs/worker-N.md`. Sub-validators append to the parent Validator's section in `.mission/reports/round-N.md`. The Orchestrator tracks top-level Workers/Validators in `state.json`; sub-agents are implementation details within each top-level agent. |
 
-## 11. Config Validation
+## 12. Config Validation
 
 | Field | Type | Valid Values | Default |
 |-------|------|-------------|---------|
@@ -607,9 +638,9 @@ Archived:
 | `effort.worker` | string | `low`, `medium`, `high`, `max` | `high` |
 | `effort.validator` | string | `low`, `medium`, `high`, `max` | `high` |
 | `maxRounds` | integer | 1-50 | 10 |
-| `autoCommit` | boolean | `true`, `false` | `false` |
+| `maxDurationMinutes` | integer | 10-480 | 120 |
 
-## 12. Mandatory Read Checklists
+## 13. Mandatory Read Checklists
 
 Embedded in every agent prompt as a non-skippable gate.
 
