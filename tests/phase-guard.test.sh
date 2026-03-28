@@ -214,6 +214,46 @@ assert_blocked "Validator: Write source via traversal" "Write" '{"file_path":"te
 assert_allowed "Validator: Write test file via normalized path" "Write" '{"file_path":"src/../tests/test_main.py"}'
 
 # ─────────────────────────────────────────────
+# TEST GROUP: Bug fixes regression
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Bug fixes regression ---"
+
+# Bug 2: python3 -m pytest test coverage
+create_state "worker"
+assert_blocked "Worker: Bash python3 -m pytest" "Bash" '{"command":"python3 -m pytest tests/"}'
+
+# Bug 3: spec/ directory for Validator
+create_state "validator"
+assert_allowed "Validator: Write spec/support/helpers.rb (spec dir)" "Write" '{"file_path":"spec/support/helpers.rb"}'
+assert_allowed "Validator: Write spec/factories/user.rb (spec dir)" "Write" '{"file_path":"spec/factories/user.rb"}'
+
+# Bug 4: Absolute paths
+create_state "orchestrator"
+assert_allowed "Orch: Write absolute .mission/plan.md" "Write" '{"file_path":"/home/user/project/.mission/plan.md"}'
+assert_blocked "Orch: Write absolute source file" "Write" '{"file_path":"/home/user/project/src/index.ts"}'
+
+create_state "worker"
+assert_blocked "Worker: Write absolute .mission/state.json" "Write" '{"file_path":"/home/user/project/.mission/state.json"}'
+assert_blocked "Worker: Write absolute .mission/plan.md" "Write" '{"file_path":"/home/user/project/.mission/plan.md"}'
+assert_allowed "Worker: Write absolute source file" "Write" '{"file_path":"/home/user/project/src/index.ts"}'
+assert_allowed "Worker: Write absolute worker-log" "Write" '{"file_path":"/home/user/project/.mission/worker-logs/worker-1.md"}'
+
+# Bug 6: Worker blocked from .mission/plan.md and .mission/reports
+create_state "worker"
+assert_blocked "Worker: Write .mission/plan.md" "Write" '{"file_path":".mission/plan.md"}'
+assert_blocked "Worker: Write .mission/reports/round-1.md" "Write" '{"file_path":".mission/reports/round-1.md"}'
+assert_blocked "Worker: Write .mission/summary.md" "Write" '{"file_path":".mission/summary.md"}'
+assert_allowed "Worker: Write .mission/worker-logs/worker-1.md" "Write" '{"file_path":".mission/worker-logs/worker-1.md"}'
+assert_blocked "Worker: Edit .mission/plan.md" "Edit" '{"file_path":".mission/plan.md"}'
+
+# Bug 9: Validator blocked from .mission/state.json
+create_state "validator"
+assert_blocked "Validator: Write .mission/state.json" "Write" '{"file_path":".mission/state.json"}'
+assert_blocked "Validator: Edit .mission/state.json" "Edit" '{"file_path":".mission/state.json"}'
+assert_allowed "Validator: Write .mission/reports/round-1.md" "Write" '{"file_path":".mission/reports/round-1.md"}'
+
+# ─────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────
 echo ""

@@ -87,30 +87,46 @@ except:
 }
 
 # ─── Check if path is under .mission/ ───
+# After canonicalize_path, paths are either relative (.mission/foo) or absolute (/x/.mission/foo)
 is_mission_path() {
   local filepath="$1"
   case "$filepath" in
-    .mission/*|*/.mission/*) return 0 ;;
-    *) return 1 ;;
+    .mission/*) return 0 ;;
   esac
+  # Match absolute paths: contains /.mission/ segment
+  if [[ "$filepath" == *"/.mission/"* ]]; then
+    return 0
+  fi
+  return 1
 }
 
 # ─── Check if path is .mission/state.json ───
 is_state_json() {
   local filepath="$1"
-  case "$filepath" in
-    .mission/state.json|*/.mission/state.json) return 0 ;;
-    *) return 1 ;;
-  esac
+  local base
+  base=$(basename "$filepath")
+  if [ "$base" != "state.json" ]; then
+    return 1
+  fi
+  # Check parent dir is .mission
+  local parent
+  parent=$(basename "$(dirname "$filepath")")
+  if [ "$parent" = ".mission" ]; then
+    return 0
+  fi
+  return 1
 }
 
 # ─── Check if path is .mission/worker-logs/* ───
 is_worker_log() {
   local filepath="$1"
   case "$filepath" in
-    .mission/worker-logs/*|*/.mission/worker-logs/*) return 0 ;;
-    *) return 1 ;;
+    .mission/worker-logs/*) return 0 ;;
   esac
+  if [[ "$filepath" == *"/.mission/worker-logs/"* ]]; then
+    return 0
+  fi
+  return 1
 }
 
 # ─── Check if path is a test file ───
@@ -132,6 +148,11 @@ is_test_file() {
   # Match __tests__/* anywhere in path
   case "$filepath" in
     *__tests__/*|*/__tests__/*) return 0 ;;
+  esac
+
+  # Match spec/* directory (Ruby rspec convention)
+  case "$filepath" in
+    spec/*|*/spec/*) return 0 ;;
   esac
 
   # Match .mission/reports/*
@@ -235,10 +256,14 @@ case "$PHASE" in
       Write|Edit)
         filepath=$(extract_file_path "$TOOL_INPUT")
         filepath=$(canonicalize_path "$filepath")
-        if [ -n "$filepath" ] && is_state_json "$filepath"; then
-          block "Workers cannot modify .mission/state.json. Only the Orchestrator manages mission state."
+        # Workers can write to .mission/worker-logs/* only
+        if [ -n "$filepath" ] && is_mission_path "$filepath"; then
+          if is_worker_log "$filepath"; then
+            exit 0  # Workers can write their own logs
+          fi
+          block "Workers cannot modify .mission/ files (except worker-logs). Only the Orchestrator manages mission state, plan, and reports."
         fi
-        exit 0  # Workers can write/edit everything else
+        exit 0  # Workers can write/edit everything else (source files)
         ;;
       Bash)
         cmd=$(extract_command "$TOOL_INPUT")
@@ -266,6 +291,10 @@ case "$PHASE" in
       Write|Edit)
         filepath=$(extract_file_path "$TOOL_INPUT")
         filepath=$(canonicalize_path "$filepath")
+        # Block state.json explicitly — Validators must not modify mission state
+        if [ -n "$filepath" ] && is_state_json "$filepath"; then
+          block "Validators cannot modify .mission/state.json. Only the Orchestrator manages mission state."
+        fi
         if [ -n "$filepath" ] && (is_test_file "$filepath" || is_mission_path "$filepath"); then
           exit 0  # Validators can write test files and .mission/reports/*
         fi
