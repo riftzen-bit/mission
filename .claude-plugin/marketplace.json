@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "mission",
+  "description": "Strict 3-role orchestration plugin — Orchestrator, Worker, Validator with hard hook enforcement",
+  "owner": {
+    "name": "Paul"
+  },
+  "plugins": [
+    {
+      "name": "mission",
+      "source": "./",
+      "description": "3-role orchestration with strict isolation and PreToolUse hooks enforcement",
+      "version": "0.1.0",
+      "category": "workflow",
+      "tags": ["orchestration", "agents", "hooks", "tdd", "validation"],
+      "license": "MIT"
+    }
+  ]
+}

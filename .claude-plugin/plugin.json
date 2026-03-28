@@ -1,0 +1,17 @@
+{
+  "name": "mission",
+  "version": "0.1.0",
+  "description": "Strict 3-role orchestration plugin for Claude Code — Orchestrator plans, Workers code, Validators verify. Hard enforcement via hooks.",
+  "author": {
+    "name": "Paul"
+  },
+  "license": "MIT",
+  "keywords": ["claude-code", "orchestration", "mission", "agents", "hooks", "tdd"],
+  "agents": [
+    "./agents/orchestrator.md",
+    "./agents/worker.md",
+    "./agents/validator.md"
+  ],
+  "commands": ["./commands/"],
+  "skills": ["./skills/"]
+}
