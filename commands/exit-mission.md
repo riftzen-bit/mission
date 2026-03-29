@@ -1,19 +1,28 @@
 ---
-description: "Exit Mission Mode — deactivate mission, save state, output summary"
+name: exit-mission
+description: "Exit Mission Mode — emergency stop that always works, bypasses all guards"
 ---
 
 # Exit Mission
 
+**Emergency stop — ALWAYS works.** No persistence setting, no phase lock, and no unresolved issue count can prevent `/exit-mission` from deactivating the mission. The user is always in control.
+
+## What Happens
+
 1. Read `.mission/state.json`
 2. Set `"active": false` and record `"endedAt"` timestamp
-3. Output a summary of the mission (from memory, before deletion):
-   - Task description
-   - Number of rounds completed
-   - Files created and modified
-   - Test results
-   - Duration
-4. Hooks auto-deactivate (phase-guard checks `active` field)
-5. Delete `.mission/` directory entirely: `rm -rf .mission/`
+3. Display cleanup status and mission summary
+4. Delete `.mission/` directory entirely: `rm -rf .mission/`
+5. Hooks auto-deactivate (phase-guard checks `active` field)
+
+## endedAt vs completedAt — The Bypass Mechanism
+
+`/exit-mission` writes `"active": false` with an **`endedAt`** field (NOT `completedAt`). This distinction is critical:
+
+- **`completedAt`** = legitimate completion → triggers cleanup guard checks (summary.md required, worker-logs must be clean)
+- **`endedAt`** = force exit → **bypasses ALL cleanup guards** (no cleanup required for emergency stops)
+
+The phase-guard hook only enforces cleanup when `completedAt` is present. `/exit-mission` uses `endedAt` instead, so it always works regardless of mission state.
 
 ## Relentless Mode Warning
 
@@ -27,11 +36,7 @@ If the mission is in relentless mode (`persistence: "relentless"`), display a wa
 
 Force exit regardless by running `/exit-mission` again or confirming.
 
-## Always Works
-
-`/exit-mission` ALWAYS deactivates the mission regardless of mode. It is the user's emergency brake. No persistence setting, no phase lock, and no unresolved issue count can prevent `/exit-mission` from working. The user is always in control.
-
-## Cleanup Status
+## Cleanup Status Display
 
 When `/exit-mission` runs, display cleanup readiness before deactivating:
 
@@ -44,10 +49,16 @@ Cleanup Status:
 
 If cleanup is incomplete and the mission completed normally (not force-stopped), warn the user.
 
-## Force Exit Bypasses All Guards
+## Summary Output
 
-`/exit-mission` writes `"active": false` with an `"endedAt"` field (NOT `"completedAt"`). This distinction is important:
-- `completedAt` = legitimate completion → triggers cleanup guard checks
-- `endedAt` = force exit → bypasses cleanup guard (no cleanup required for emergency stops)
+Before deleting `.mission/`, output a summary from memory:
+- Task description
+- Number of rounds completed
+- Features progress from `features.json` (X/Y completed)
+- Files created and modified
+- Test results
+- Duration
 
-The hook only enforces cleanup when `completedAt` is present. `/exit-mission` uses `endedAt` instead, so it always works. After deactivation, the `.mission/` directory is deleted via `rm -rf .mission/`. This is safe because hooks exit early when `active` is not `"true"`.
+## Safety
+
+After deactivation, `.mission/` is deleted via `rm -rf .mission/`. This is safe because hooks exit early when `active` is not `"true"`. No mission state is preserved after exit.

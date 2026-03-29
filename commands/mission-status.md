@@ -1,17 +1,19 @@
 ---
-description: "Show current Mission Mode progress — phase, round, workers, validator results"
+name: mission-status
+description: "Show current Mission Mode progress — phase, round, per-feature status from features.json"
 ---
 
 # Mission Status
 
-Reads `.mission/state.json` and displays real-time mission progress.
+Reads `.mission/state.json` and `.mission/features.json` to display real-time mission progress.
 
 ## Implementation
 
 1. Check if `.mission/state.json` exists
    - If not: output "No active mission. Use /enter-mission to start one."
-2. Read and parse state.json
-3. Display:
+2. Read and parse `state.json`
+3. Read and parse `features.json` for per-feature progress
+4. Display dashboard:
 
 ```
 [MISSION STATUS]
@@ -26,10 +28,20 @@ Current action: <currentAction from state>
 Models: Orchestrator=<model> | Worker=<model> | Validator=<model>
 
 Phase Lock: <phase> (since <lockedAt>)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Feature Progress (from features.json):
+  ✓ auth-middleware      completed  — "Add JWT auth middleware"
+  ⟳ user-api             in-progress — "Create user CRUD endpoints"
+  ○ admin-dashboard      pending     — "Build admin panel UI"
+  ✗ email-service        failed      — "Integrate email notifications"
+
+  Summary: 1/4 completed | 1 in-progress | 1 pending | 1 failed
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Workers:
-  <status icon> worker-1: <task description>
-  <status icon> worker-2: <task description>
+  <status icon> worker-1: <feature assignment>
+  <status icon> worker-2: <feature assignment>
 
 Phase Timeline:
   ORCHESTRATOR: 0:00 → 1:23
@@ -46,7 +58,21 @@ Latest Validator Report: <path or "pending">
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-Status icons: `✓` completed, `⟳` in_progress, `○` pending
+## Feature Progress Display
+
+The feature progress section reads `features.json` and displays each feature with:
+- **Feature ID** — The unique slug from `features.json`
+- **Status** — One of: `completed`, `in-progress`, `pending`, `failed`
+- **Description** — The feature description from `features.json`
+
+Status icons: `✓` completed, `⟳` in-progress, `○` pending, `✗` failed
+
+A summary line shows the count of features in each status. This gives an at-a-glance view of overall mission progress.
+
+If `features.json` does not exist yet (mission is still in initial research phase), display:
+```
+Feature Progress: No features.json yet — Orchestrator is researching the codebase.
+```
 
 ## Field Details
 
