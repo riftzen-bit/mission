@@ -25,6 +25,7 @@ if _PROJECT_DIR not in sys.path:
     sys.path.insert(0, _PROJECT_DIR)
 
 from engine import (  # noqa: E402
+    atomic_write,
     find_state_file,
     get_current_feature,
     get_next_feature,
@@ -187,8 +188,7 @@ def _main_inner():
     # ── Step 6: Write checkpoint.md ──────────────────────────────────────────
     checkpoint_path = os.path.join(mission_dir, "checkpoint.md")
     try:
-        with open(checkpoint_path, "w", encoding="utf-8") as fh:
-            fh.write(checkpoint_content)
+        atomic_write(checkpoint_path, checkpoint_content)
     except OSError as e:
         print(f"mission-precompact: failed to write checkpoint: {e}", file=sys.stderr, flush=True)
 

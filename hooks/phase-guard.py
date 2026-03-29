@@ -45,8 +45,19 @@ from engine import (  # noqa: E402
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _is_state_json(filepath):
-    """Return True if *filepath* points to .mission/state.json."""
+def _is_state_json(filepath, mission_dir=None):
+    """Return True if *filepath* points to the active .mission/state.json.
+
+    When *mission_dir* is provided, does a full path comparison (anchored).
+    Falls back to basename heuristic if mission_dir is not available.
+    """
+    if mission_dir:
+        expected = os.path.join(mission_dir, "state.json")
+        try:
+            return os.path.normcase(os.path.realpath(filepath)) ==                    os.path.normcase(os.path.realpath(expected))
+        except (OSError, ValueError):
+            pass
+    # Fallback: basename heuristic
     base = os.path.basename(filepath)
     if base != "state.json":
         return False
@@ -115,17 +126,35 @@ def _extract_content(tool_input_dict):
 
 
 def _has_active_false(content):
-    """Check if content sets active to false."""
+    """Check if content sets active to false (JSON-aware)."""
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, dict) and parsed.get("active") is False:
+            return True
+    except (json.JSONDecodeError, ValueError):
+        pass
     return '"active": false' in content or '"active":false' in content
 
 
 def _has_completed_at(content):
-    """Check if content contains completedAt."""
+    """Check if content contains completedAt key (JSON-aware)."""
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, dict) and "completedAt" in parsed:
+            return True
+    except (json.JSONDecodeError, ValueError):
+        pass
     return "completedAt" in content
 
 
 def _has_ended_at(content):
-    """Check if content contains endedAt (force-exit bypass)."""
+    """Check if content contains endedAt key (JSON-aware)."""
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, dict) and "endedAt" in parsed:
+            return True
+    except (json.JSONDecodeError, ValueError):
+        pass
     return "endedAt" in content
 
 
@@ -312,7 +341,7 @@ def main():
     # These apply to Write, Edit, and MultiEdit tools writing to state.json
     is_write_tool = tool_name in ("Write", "Edit", "MultiEdit")
 
-    if is_write_tool and file_path and _is_state_json(file_path):
+    if is_write_tool and file_path and _is_state_json(file_path, mission_dir):
         content = _extract_content(tool_input)
 
         # ── Step 9: Exit-mission bypass ──────────────────────────────────────
@@ -545,4 +574,9 @@ def _enforce_validator(tool_name, tool_input, file_path):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # On unhandled crash (e.g. RecursionError), allow the tool call
+        # rather than blocking with a traceback
+        sys.exit(0)
