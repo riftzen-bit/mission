@@ -11,7 +11,7 @@
       "name": "mission",
       "source": "./",
       "description": "3-role orchestration with strict phase isolation, auto-continuation, and security-hardened hooks",
-      "version": "0.4.0",
+      "version": "1.0.0",
       "category": "workflow",
       "tags": ["orchestration", "agents", "hooks", "tdd", "validation", "mission-mode"],
       "license": "MIT"

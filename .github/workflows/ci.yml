@@ -22,6 +22,9 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Install pytest
+        run: pip install pytest
+
       - name: Verify python3 available
         shell: bash
         run: python3 --version
@@ -33,3 +36,11 @@ jobs:
       - name: Run mission-continue tests
         shell: bash
         run: bash tests/mission-continue.test.sh
+
+      - name: Run mission-reminder tests
+        shell: bash
+        run: bash tests/mission-reminder.test.sh
+
+      - name: Run Python unit tests (pytest)
+        shell: bash
+        run: python3 -m pytest tests/test_engine.py -v

@@ -1,6 +1,6 @@
 {
   "name": "mission",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "description": "Strict 3-role orchestration plugin — Orchestrator plans, Workers code, Validators verify. Hard enforcement via PreToolUse hooks.",
   "author": {
     "name": "Paul",
