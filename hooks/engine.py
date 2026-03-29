@@ -86,21 +86,81 @@ def load_config(config_path=None):
 def load_features(features_path=None):
     """Read .mission/features.json.
 
-    Returns ``{"features": []}`` on missing or malformed file.
+    Falls back to ``.bak`` copy if the primary file is missing or corrupt.
+    Returns ``{"features": []}`` if both fail.
     """
     if features_path is None:
         state_file = find_state_file()
         if state_file is None:
             return {"features": []}
         features_path = os.path.join(os.path.dirname(state_file), "features.json")
-    try:
-        with open(features_path, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        if not isinstance(data, dict):
-            return {"features": []}
+
+    # Try primary file first
+    data = _try_load_json(features_path)
+    if data is not None:
         return data
+
+    # Primary failed — try .bak
+    bak_path = features_path + ".bak"
+    data = _try_load_json(bak_path)
+    if data is not None:
+        return data
+
+    return {"features": []}
+
+
+def _try_load_json(path):
+    """Try to load a JSON dict from *path*. Returns dict or None."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            return data
+        return None
     except (OSError, json.JSONDecodeError, ValueError):
-        return {"features": []}
+        return None
+
+
+# ─── Atomic write ────────────────────────────────────────────────────────────
+
+def atomic_write(path, content):
+    """Write *content* to *path* atomically via a temp file + os.replace().
+
+    On POSIX, ``os.replace()`` is atomic. On Windows it is near-atomic.
+    If the write or replace fails, the original file is untouched.
+    """
+    tmp_path = path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, path)
+    except OSError:
+        # Clean up temp file on failure; original file untouched
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def write_features(features_path, data):
+    """Write features dict to *features_path* atomically, keeping a .bak copy.
+
+    Creates a ``.bak`` backup of the existing file before overwriting.
+    """
+    content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    # Backup existing file
+    if os.path.isfile(features_path):
+        bak_path = features_path + ".bak"
+        try:
+            with open(features_path, "r", encoding="utf-8") as fh:
+                bak_content = fh.read()
+            atomic_write(bak_path, bak_content)
+        except OSError:
+            pass  # Best-effort backup
+    atomic_write(features_path, content)
 
 
 # ─── Path utilities ───────────────────────────────────────────────────────────
@@ -151,14 +211,16 @@ def is_mission_path(path_str):
 
 # ─── File / command classification ────────────────────────────────────────────
 
+_TEST_FILE_EXTENSIONS = r"\.(?:py|js|ts|jsx|tsx|rb|go|rs|java|kt|cpp|c|cs|swift|sh)$"
+
 _TEST_FILE_BASENAME_PATTERNS = re.compile(
     r"(?:"
     r".*\.test\..+"       # *.test.*
     r"|.*\.spec\..+"      # *.spec.*
     r"|.*_test\..+"       # *_test.*
     r"|.*_spec\..+"       # *_spec.*
-    r"|test_.*"           # test_*
-    r")$"
+    r"|test_.*" + _TEST_FILE_EXTENSIONS  # test_*.py, test_*.js, etc. (not test_data.json)
+    + r")$"
 )
 
 _TEST_DIR_PATTERNS = re.compile(

@@ -943,6 +943,249 @@ else
 fi
 
 # ─────────────────────────────────────────────
+# NEW: Exit-mission bypass — only Orchestrator can use endedAt
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Exit-mission bypass: phase restriction ---"
+
+# Worker cannot write endedAt → BLOCK
+create_state "worker"
+TOTAL=$((TOTAL + 1))
+output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"endedAt\":\"2026-03-29T00:00:00Z\"}"}' 2>&1) || true
+if echo "$output" | grep -q "BLOCK"; then
+  echo "PASS: Worker writing endedAt → BLOCK"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Worker writing endedAt → should BLOCK"
+  echo "  output: $output"
+  FAILED=$((FAILED + 1))
+fi
+
+# Validator cannot write endedAt → BLOCK
+create_state "validator"
+TOTAL=$((TOTAL + 1))
+output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Edit" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","new_string":"{\"endedAt\":\"2026-03-29T00:00:00Z\"}"}' 2>&1) || true
+if echo "$output" | grep -q "BLOCK"; then
+  echo "PASS: Validator writing endedAt → BLOCK"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Validator writing endedAt → should BLOCK"
+  echo "  output: $output"
+  FAILED=$((FAILED + 1))
+fi
+
+# Orchestrator CAN write endedAt → ALLOW (exit 0, no BLOCK)
+create_state "orchestrator"
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"endedAt\":\"2026-03-29T00:00:00Z\"}"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 0 ]; then
+  echo "PASS: Orchestrator writing endedAt → ALLOW"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Orchestrator writing endedAt → should ALLOW (exit 0) but got $exit_code"
+  FAILED=$((FAILED + 1))
+fi
+
+# Worker with endedAt AND completedAt → still goes through normal guards (not bypass)
+create_state "worker"
+TOTAL=$((TOTAL + 1))
+output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"endedAt\":\"2026-03-29\",\"completedAt\":\"2026-03-29\"}"}' 2>&1) || true
+if echo "$output" | grep -q "BLOCK"; then
+  echo "PASS: Worker endedAt+completedAt → BLOCK (bypass not triggered)"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Worker endedAt+completedAt → should BLOCK (normal guards apply)"
+  echo "  output: $output"
+  FAILED=$((FAILED + 1))
+fi
+
+# ─────────────────────────────────────────────
+# NEW: MultiEdit content extraction
+# ─────────────────────────────────────────────
+echo ""
+echo "--- MultiEdit content extraction ---"
+
+# MultiEdit with completedAt + active:false on state.json → should be checked by cleanup guard
+create_state "orchestrator"
+TOTAL=$((TOTAL + 1))
+multi_input='{"file_path":"'"$TEST_DIR"'/.mission/state.json","edits":[{"old_string":"old","new_string":"{\"active\": false, \"completedAt\": \"2026-03-29\"}"}]}'
+output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "MultiEdit" "$multi_input" 2>&1) || true
+if echo "$output" | grep -q "BLOCK"; then
+  echo "PASS: MultiEdit with active:false+completedAt → BLOCK (cleanup guard catches it)"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: MultiEdit should trigger cleanup guard but was allowed"
+  echo "  output: $output"
+  FAILED=$((FAILED + 1))
+fi
+
+# MultiEdit with endedAt on state.json as orchestrator → ALLOW (exit bypass works)
+create_state "orchestrator"
+TOTAL=$((TOTAL + 1))
+multi_input='{"file_path":"'"$TEST_DIR"'/.mission/state.json","edits":[{"old_string":"old","new_string":"{\"endedAt\": \"2026-03-29\"}"}]}'
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "MultiEdit" "$multi_input" >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 0 ]; then
+  echo "PASS: MultiEdit orchestrator endedAt → ALLOW"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: MultiEdit orchestrator endedAt → should ALLOW but got exit $exit_code"
+  FAILED=$((FAILED + 1))
+fi
+
+# ─────────────────────────────────────────────
+# NEW: Verdict regex tightness
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Verdict regex precision ---"
+
+# Report with "Verdict: PASS" → ALLOW completion
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+mkdir -p "$TEST_DIR/.mission/reports"
+echo -e "# Report\n\n## Verdict: PASS\n\nAll good." > "$TEST_DIR/.mission/reports/round-1.md"
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"active\":true,\"phase\":\"complete\",\"round\":1,\"persistence\":\"relentless\"}"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 0 ]; then
+  echo "PASS: Verdict: PASS report → ALLOW completion"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Verdict: PASS report → should ALLOW but got exit $exit_code"
+  FAILED=$((FAILED + 1))
+fi
+
+# Report with "Verdict: FAIL" containing word PASS elsewhere → BLOCK
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+mkdir -p "$TEST_DIR/.mission/reports"
+echo -e "# Report\n\n## Verdict: FAIL\n\nPrevious round had PASS but regression found." > "$TEST_DIR/.mission/reports/round-1.md"
+TOTAL=$((TOTAL + 1))
+output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"active\":true,\"phase\":\"complete\",\"round\":1,\"persistence\":\"relentless\"}"}' 2>&1) || true
+if echo "$output" | grep -q "BLOCK"; then
+  echo "PASS: Verdict: FAIL with PASS elsewhere → BLOCK (regex doesn't false-positive)"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Verdict: FAIL report should BLOCK even if PASS appears elsewhere"
+  echo "  output: $output"
+  FAILED=$((FAILED + 1))
+fi
+
+# Report with "Verdict: PASS" on its own line (no heading) → ALLOW
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+mkdir -p "$TEST_DIR/.mission/reports"
+printf "Report\n\nVerdict: PASS\n" > "$TEST_DIR/.mission/reports/round-1.md"
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"active\":true,\"phase\":\"complete\",\"round\":1,\"persistence\":\"relentless\"}"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 0 ]; then
+  echo "PASS: Verdict: PASS (no heading) → ALLOW"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Verdict: PASS (no heading) → should ALLOW"
+  FAILED=$((FAILED + 1))
+fi
+# -----------------------------------------
+# NEW: maxRounds / maxDuration enforcement
+# -----------------------------------------
+echo ""
+echo "--- maxRounds / maxDuration enforcement ---"
+
+# standard mode, round > maxRounds (default 10) -> BLOCK
+create_state "orchestrator"
+mkdir -p "$TEST_DIR/.mission"
+cat > "$TEST_DIR/.mission/state.json" << 'MAXS'
+{"active":true,"phase":"orchestrator","task":"test","round":15,"persistence":"standard","strictPhaseLock":false}
+MAXS
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Agent" '{"subagent_type":"mission-worker","model":"opus"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 1 ]; then
+  echo "PASS: maxRounds standard round=15 -> BLOCK"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: maxRounds standard round=15 -> expected BLOCK"
+  FAILED=$((FAILED + 1))
+fi
+
+# relentless mode, round > maxRounds -> WARN + ALLOW
+cat > "$TEST_DIR/.mission/state.json" << 'MAXS'
+{"active":true,"phase":"orchestrator","task":"test","round":15,"persistence":"relentless","strictPhaseLock":false}
+MAXS
+TOTAL=$((TOTAL + 1))
+exit_code=0
+output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Agent" '{"subagent_type":"mission-worker","model":"opus"}' 2>&1) || exit_code=$?
+if [ "$exit_code" -eq 0 ] && echo "$output" | grep -qF "WARNING"; then
+  echo "PASS: maxRounds relentless round=15 -> WARN + ALLOW"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: maxRounds relentless -> expected WARN + ALLOW"
+  echo "  exit=$exit_code output=$output"
+  FAILED=$((FAILED + 1))
+fi
+
+# round within limits -> ALLOW
+cat > "$TEST_DIR/.mission/state.json" << 'MAXS'
+{"active":true,"phase":"orchestrator","task":"test","round":3,"persistence":"standard","strictPhaseLock":false}
+MAXS
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Agent" '{"subagent_type":"mission-worker","model":"opus"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 0 ]; then
+  echo "PASS: maxRounds standard round=3 -> ALLOW"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: maxRounds standard round=3 -> expected ALLOW"
+  FAILED=$((FAILED + 1))
+fi
+
+# duration exceeded -> BLOCK
+cat > "$TEST_DIR/.mission/state.json" << 'MAXS'
+{"active":true,"phase":"orchestrator","task":"test","round":1,"persistence":"standard","strictPhaseLock":false,"startedAt":"2020-01-01T00:00:00Z"}
+MAXS
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Agent" '{"subagent_type":"mission-worker","model":"opus"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 1 ]; then
+  echo "PASS: maxDuration standard expired -> BLOCK"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: maxDuration standard expired -> expected BLOCK"
+  FAILED=$((FAILED + 1))
+fi
+
+# non-mission agent ignores limits
+cat > "$TEST_DIR/.mission/state.json" << 'MAXS'
+{"active":true,"phase":"orchestrator","task":"test","round":99,"persistence":"standard","strictPhaseLock":false}
+MAXS
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Agent" '{"subagent_type":"code-reviewer","model":"haiku"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 0 ]; then
+  echo "PASS: non-mission agent round=99 -> ALLOW"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: non-mission agent round=99 -> expected ALLOW"
+  FAILED=$((FAILED + 1))
+fi
+
+# no startedAt -> only round check (no crash)
+cat > "$TEST_DIR/.mission/state.json" << 'MAXS'
+{"active":true,"phase":"orchestrator","task":"test","round":15,"persistence":"standard","strictPhaseLock":false}
+MAXS
+TOTAL=$((TOTAL + 1))
+exit_code=0
+cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Agent" '{"subagent_type":"mission-validator","model":"opus"}' >/dev/null 2>&1 || exit_code=$?
+if [ "$exit_code" -eq 1 ]; then
+  echo "PASS: validator dispatch round=15 no startedAt -> BLOCK"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: validator dispatch round=15 -> expected BLOCK"
+  FAILED=$((FAILED + 1))
+fi
+
+
+
+# ─────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────
 echo ""

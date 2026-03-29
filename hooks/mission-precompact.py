@@ -39,8 +39,8 @@ from engine import (  # noqa: E402
 
 
 def _feature_progress(features):
-    """Return dict with completed, in-progress, pending counts."""
-    counts = {"completed": 0, "in-progress": 0, "pending": 0}
+    """Return dict with completed, in-progress, pending, failed counts."""
+    counts = {"completed": 0, "in-progress": 0, "pending": 0, "failed": 0}
     feature_list = features.get("features", [])
     if not isinstance(feature_list, list):
         return counts
@@ -61,9 +61,12 @@ def _next_action(phase, feature, features):
         progress = _feature_progress(features)
         if progress["in-progress"] > 0:
             return "Monitor in-progress Worker, then dispatch Validator when done."
+        if progress["failed"] > 0 and progress["pending"] == 0 and progress["in-progress"] == 0:
+            return "Some features failed. Re-scope or retry failed features before completing."
         if progress["pending"] > 0:
             return "Dispatch Worker for next pending feature."
-        if progress["completed"] == sum(progress.values()) and sum(progress.values()) > 0:
+        total = sum(progress.values())
+        if progress["completed"] == total and total > 0:
             return "All features completed. Dispatch Validator for final check, then run completion gate."
         return "Review features.json and dispatch next Worker or Validator."
     elif phase == "worker":
@@ -151,6 +154,21 @@ def _main_inner():
     lines.append(f"- completed: {progress['completed']}")
     lines.append(f"- in-progress: {progress['in-progress']}")
     lines.append(f"- pending: {progress['pending']}")
+    lines.append(f"- failed: {progress['failed']}")
+
+    # Failed features with reasons (if any)
+    feature_list = features.get("features", [])
+    failed_features = [
+        f for f in feature_list
+        if isinstance(f, dict) and f.get("status") == "failed"
+    ]
+    if failed_features:
+        lines.append("")
+        lines.append("## Failed Features")
+        for ff in failed_features:
+            fid = ff.get("id", "unknown")
+            reason = ff.get("failureReason", "no reason recorded")
+            lines.append(f"- {fid}: {reason}")
 
     # Next action section
     lines.append("")
@@ -168,8 +186,11 @@ def _main_inner():
 
     # ── Step 6: Write checkpoint.md ──────────────────────────────────────────
     checkpoint_path = os.path.join(mission_dir, "checkpoint.md")
-    with open(checkpoint_path, "w", encoding="utf-8") as fh:
-        fh.write(checkpoint_content)
+    try:
+        with open(checkpoint_path, "w", encoding="utf-8") as fh:
+            fh.write(checkpoint_content)
+    except OSError as e:
+        print(f"mission-precompact: failed to write checkpoint: {e}", file=sys.stderr, flush=True)
 
     # Exit 0 — PreCompact hooks can't block compaction
     sys.exit(0)

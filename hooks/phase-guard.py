@@ -89,15 +89,29 @@ def _is_validator_agent(agent_type):
 def _extract_content(tool_input_dict):
     """Extract the content being written from a Write/Edit/MultiEdit tool input.
 
-    Write uses "content", Edit uses "new_string" or "new_str".
-    Returns the content string or empty string.
+    Write uses "content", Edit uses "new_string" or "new_str",
+    MultiEdit uses "edits" array with "new_string"/"new_str" per edit.
+    Returns the concatenated content string or empty string.
     """
-    return (
-        tool_input_dict.get("content", "")
-        or tool_input_dict.get("new_string", "")
-        or tool_input_dict.get("new_str", "")
-        or ""
-    )
+    # Write tool
+    content = tool_input_dict.get("content", "")
+    if content:
+        return content
+    # Edit tool
+    content = tool_input_dict.get("new_string", "") or tool_input_dict.get("new_str", "")
+    if content:
+        return content
+    # MultiEdit tool — concatenate all edit new_string values
+    edits = tool_input_dict.get("edits", [])
+    if isinstance(edits, list) and edits:
+        parts = []
+        for edit in edits:
+            if isinstance(edit, dict):
+                part = edit.get("new_string", "") or edit.get("new_str", "") or ""
+                if part:
+                    parts.append(part)
+        return " ".join(parts)
+    return ""
 
 
 def _has_active_false(content):
@@ -256,6 +270,44 @@ def main():
             sys.exit(0)
         # action == "allow" → continue
 
+
+    # ── Step 8b: Round / duration limits for Agent dispatch ─────────────────
+    if tool_name == "Agent" and _PHASE == "orchestrator":
+        subagent_type = tool_input.get("subagent_type", "")
+        if subagent_type in ("mission-worker", "mission-validator"):
+            config = load_config()
+            max_rounds = state.get("maxRounds", config.get("maxRounds", 10))
+            max_duration = state.get("maxDurationMinutes", config.get("maxDurationMinutes", 120))
+
+            round_exceeded = isinstance(max_rounds, (int, float)) and current_round > max_rounds
+
+            duration_exceeded = False
+            started_at = state.get("startedAt", "")
+            if started_at and isinstance(max_duration, (int, float)):
+                try:
+                    import datetime
+                    start_dt = datetime.datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                    elapsed = (datetime.datetime.now(datetime.timezone.utc) - start_dt).total_seconds() / 60
+                    duration_exceeded = elapsed > max_duration
+                except (ValueError, TypeError, OverflowError):
+                    pass
+
+            if round_exceeded or duration_exceeded:
+                parts = []
+                if round_exceeded:
+                    parts.append(f"round {current_round} exceeds maxRounds {max_rounds}")
+                if duration_exceeded:
+                    parts.append(f"elapsed time exceeds maxDurationMinutes {max_duration}")
+                detail = " and ".join(parts)
+
+                if persistence == "relentless":
+                    print(f"WARNING: [MISSION GUARD] {detail} — continuing in relentless mode",
+                          file=sys.stderr, flush=True)
+                else:
+                    block(f"Limit exceeded — {detail}",
+                          f"Mission is in {persistence} mode. Use /mission-config to increase limits "
+                          "or switch to relentless mode")
+
     # ── State.json mutation checks (steps 9-13) ─────────────────────────────
     # These apply to Write, Edit, and MultiEdit tools writing to state.json
     is_write_tool = tool_name in ("Write", "Edit", "MultiEdit")
@@ -266,7 +318,13 @@ def main():
         # ── Step 9: Exit-mission bypass ──────────────────────────────────────
         # endedAt without completedAt → force-exit, bypass all guards
         # If completedAt is ALSO present, do NOT bypass (still enforce guards)
+        # SECURITY: Only the Orchestrator may force-exit the mission.
         if _has_ended_at(content) and not _has_completed_at(content):
+            if _PHASE != "orchestrator":
+                block(
+                    "Only the Orchestrator can force-exit the mission",
+                    "Workers and Validators cannot write endedAt to state.json",
+                )
             sys.exit(0)
 
         # ── Step 10: Phase transition check ──────────────────────────────────
@@ -302,7 +360,7 @@ def main():
                         report_content = f.read()
                 except OSError:
                     report_content = ""
-                if not re.search(r"Verdict:.*PASS", report_content, re.IGNORECASE):
+                if not re.search(r"^\s*#*\s*Verdict:\s*PASS\b", report_content, re.IGNORECASE | re.MULTILINE):
                     block(
                         "Relentless mode — cannot complete mission while validator report says FAIL",
                         f"The report at .mission/reports/round-{current_round}.md must contain "
@@ -342,7 +400,7 @@ def main():
                         report_content = f.read()
                 except OSError:
                     report_content = ""
-                if not re.search(r"Verdict:.*PASS", report_content, re.IGNORECASE):
+                if not re.search(r"^\s*#*\s*Verdict:\s*PASS\b", report_content, re.IGNORECASE | re.MULTILINE):
                     block(
                         "Relentless mode — cannot deactivate while validator report says FAIL",
                         f"The report at .mission/reports/round-{current_round}.md must contain "

@@ -237,8 +237,8 @@ assert_output_contains "Orch plan: contains DO NOT DEVIATE" "DO NOT DEVIATE"
 assert_output_contains "Orch plan: contains Phase: ORCHESTRATOR" "Phase: ORCHESTRATOR"
 assert_output_contains "Orch plan: contains Round: 2" "Round: 2"
 assert_output_contains "Orch plan: contains task" "fix login bug"
-assert_output_contains "Orch plan: contains mission loop directive" "mission loop"
-assert_output_contains "Orch plan: contains dispatch keyword" "dispatch"
+assert_output_contains "Orch plan (no features): contains features.json directive" "features.json"
+assert_output_contains "Orch plan (no features): contains dispatch keyword" "dispatching Workers"
 assert_output_contains "Orch plan: contains Current Action" "dispatching workers"
 
 # ─────────────────────────────────────────────
@@ -556,7 +556,7 @@ assert_output_contains "Both plan+features: mission loop" "mission loop"
 create_state "true" "orchestrator" "1" "task"
 echo "# Plan" > "$TEST_DIR/.mission/plan.md"
 rm -f "$TEST_DIR/.mission/features.json"
-assert_output_contains "Only plan: mission loop" "mission loop"
+assert_output_contains "Only plan (no features): features.json directive" "features.json"
 
 # Only features exist, no plan → dispatch/loop
 create_state "true" "orchestrator" "1" "task"

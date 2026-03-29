@@ -99,42 +99,32 @@ def main():
 
 
 def _output_orchestrator(mission_dir, round_n, task, feature_str, current_action, features_path):
-    """Orchestrator reminder — varies based on plan/features existence."""
-    plan_exists = os.path.isfile(os.path.join(mission_dir, "plan.md"))
+    """Orchestrator reminder — varies based on features.json existence."""
     features_exist = os.path.isfile(features_path)
 
-    if not plan_exists and not features_exist:
-        # No plan and no features — research phase
-        parts = [
-            "[MISSION SKILL ACTIVE — DO NOT DEVIATE]",
-            f"Phase: ORCHESTRATOR",
-            f"Round: {round_n}",
-            f'Task: "{task}"',
-            f"Current Feature: {feature_str}",
-        ]
-        if current_action:
-            parts.append(f"Current Action: {current_action}")
+    parts = [
+        "[MISSION SKILL ACTIVE — DO NOT DEVIATE]",
+        f"Phase: ORCHESTRATOR",
+        f"Round: {round_n}",
+        f'Task: "{task}"',
+        f"Current Feature: {feature_str}",
+    ]
+    if current_action:
+        parts.append(f"Current Action: {current_action}")
+
+    if not features_exist:
+        # No features.json yet — research phase
         parts.append(
             'Directive: "Your research MUST lead to creating .mission/features.json, '
             'then dispatching Workers. DO NOT DEVIATE."'
         )
-        print(" | ".join(parts), flush=True)
     else:
-        # Plan or features exists — dispatch/loop phase
-        parts = [
-            "[MISSION SKILL ACTIVE — DO NOT DEVIATE]",
-            f"Phase: ORCHESTRATOR",
-            f"Round: {round_n}",
-            f'Task: "{task}"',
-            f"Current Feature: {feature_str}",
-        ]
-        if current_action:
-            parts.append(f"Current Action: {current_action}")
+        # features.json exists — dispatch/loop phase
         parts.append(
             'Directive: "Follow the mission loop: dispatch Workers -> validate -> fix -> complete. '
             'DO NOT DEVIATE."'
         )
-        print(" | ".join(parts), flush=True)
+    print(" | ".join(parts), flush=True)
 
 
 def _output_worker(round_n, task, feature_str):
