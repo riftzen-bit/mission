@@ -265,15 +265,58 @@ echo ""
 echo "--- [4] Orchestrator + Agent (STRONGEST) ---"
 
 create_state "true" "orchestrator" "1" "build auth system" "dispatching workers" "relentless"
-# Debug: run once with stderr visible to diagnose Windows failures
-debug_out=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/mission-continue.py" "Agent" 2>&1) || true
-if [ -z "$debug_out" ]; then
-  echo "DEBUG: Orchestrator+Agent produced empty output. Stderr check:"
-  cd "$TEST_DIR" && python3 -u "$PROJECT_DIR/hooks/mission-continue.py" "Agent" 2>&1 || echo "DEBUG: exit code $?"
-  echo "DEBUG: state.json content:"
-  cat "$TEST_DIR/.mission/state.json" 2>/dev/null || echo "DEBUG: no state.json"
-  echo "DEBUG: Testing engine import:"
-  cd "$TEST_DIR" && python3 -c "import sys; sys.path.insert(0, '$PROJECT_DIR/hooks'); from engine import find_state_file; print('ENGINE OK, state:', find_state_file())" 2>&1 || echo "DEBUG: engine import failed"
+# Debug: capture stdout and stderr separately to diagnose Windows failures
+debug_stdout=$(cd "$TEST_DIR" && python3 -u "$PROJECT_DIR/hooks/mission-continue.py" "Agent" 2>"$TEST_DIR/mc_debug_stderr") || true
+debug_stderr=$(cat "$TEST_DIR/mc_debug_stderr" 2>/dev/null) || true
+if [ -z "$debug_stdout" ]; then
+  echo "DEBUG: Orchestrator+Agent produced empty stdout."
+  echo "DEBUG: stderr was: $debug_stderr"
+  echo "DEBUG: Python path test:"
+  cd "$TEST_DIR" && python3 -c "
+import os, sys
+hook_path = os.path.join(r'''$PROJECT_DIR''', 'hooks', 'mission-continue.py')
+print('Hook exists:', os.path.isfile(hook_path))
+hook_dir = os.path.join(r'''$PROJECT_DIR''', 'hooks')
+print('Hook dir:', hook_dir)
+print('Engine exists:', os.path.isfile(os.path.join(hook_dir, 'engine.py')))
+sys.path.insert(0, hook_dir)
+try:
+    from engine import load_state, find_state_file
+    print('Import OK')
+    sf = find_state_file()
+    print('State file:', sf)
+    if sf:
+        s = load_state(sf)
+        print('State loaded, phase:', s.get('phase'))
+except Exception as e:
+    print('Import error:', e)
+" 2>&1 || echo "DEBUG: python test failed"
+  echo "DEBUG: Direct hook run with traceback:"
+  cd "$TEST_DIR" && python3 -u -c "
+import sys, os, traceback
+sys.path.insert(0, os.path.join(r'''$PROJECT_DIR''', 'hooks'))
+sys.path.insert(0, r'''$PROJECT_DIR''')
+try:
+    from engine import load_state, find_state_file, load_features, get_current_feature
+    sf = find_state_file()
+    state = load_state(sf)
+    print('State phase:', state.get('phase'))
+    # Simulate _orchestrator_strongest
+    round_n = state.get('round', 1)
+    task = state.get('task', 'unknown')
+    persistence = state.get('persistence', 'relentless')
+    action = state.get('currentAction', '')
+    workers = state.get('workers', [])
+    w_total = len(workers)
+    w_done = sum(1 for w in workers if isinstance(w, dict) and w.get('status') == 'completed')
+    lines = ['[MISSION ACTIVE — MANDATORY CONTINUATION]']
+    lines.append(f'Phase: ORCHESTRATOR | Round: {round_n} | Persistence: {persistence.upper()}')
+    result = chr(10).join(lines)
+    print(result)
+    print('SUCCESS: Would have printed', len(result), 'bytes')
+except Exception as e:
+    traceback.print_exc()
+" 2>&1 || echo "DEBUG: direct run failed"
 fi
 assert_output_contains "Orch+Agent → MANDATORY CONTINUATION" "Agent" "MANDATORY CONTINUATION"
 assert_output_contains "Orch+Agent → Phase ORCHESTRATOR" "Agent" "Phase: ORCHESTRATOR"
