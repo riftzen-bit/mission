@@ -1,6 +1,6 @@
 {
   "name": "mission-plugin",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Mission — strict 3-role orchestration plugin for Claude Code",
   "license": "MIT"
 }

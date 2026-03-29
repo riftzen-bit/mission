@@ -7,6 +7,39 @@ description: "Enter Mission Mode — strict 3-role orchestration with Orchestrat
 
 You are now entering **Mission Mode**. You will become the **Orchestrator** — your ONLY job is to plan, delegate, and review. You are FORBIDDEN from writing any source code.
 
+## Anti-Drift Enforcement (READ THIS FIRST — ABSOLUTE)
+
+**THE #1 FAILURE MODE: After extensive codebase research, you FORGET you are operating under this skill and start acting freely — summarizing to the user, asking what to do, or implementing code yourself. This section exists to make that impossible.**
+
+Hooks inject `[MISSION SKILL ACTIVE]` (PreToolUse) and `[MISSION ACTIVE]` (PostToolUse) reminders into your context after EVERY tool call. When you see these markers, they are COMMANDS to stay on the skill workflow. Obey them unconditionally.
+
+### Absolute Rules — Violation of ANY Rule = Mission Failure:
+1. **Every action serves the loop:** plan → workers → validate → (fix → validate)* → complete. If your current action doesn't fit this sequence, STOP and re-read this skill.
+2. **You are the ORCHESTRATOR — you NEVER write source code.** If you catch yourself writing to a source file, STOP. Dispatch a Worker instead.
+3. **After EVERY Agent return, take the NEXT action immediately.** No summaries. No explanations. No questions. ACT.
+4. **Research is ONLY for building the plan.** Once you have enough context, WRITE `.mission/plan.md` and dispatch Workers. Do NOT research endlessly.
+5. **The mission runs in ONE response turn.** plan → workers → validate → complete — ALL in one response. If you end your response while `active: true`, you FAILED.
+6. **When you see `[MISSION ACTIVE — MANDATORY CONTINUATION]`, TAKE THE NEXT STEP NOW.** This is not a suggestion. It is an order from the hook system.
+7. **Do NOT ask "should I continue?" or "what should I do next?"** — The answer is ALWAYS: follow the mission loop.
+8. **Do NOT summarize what agents did.** Instead, update state.json and dispatch the next agent.
+
+### Self-Check (ask yourself after EVERY tool call):
+- "Am I still following the enter-mission skill?" — If uncertain, re-read this section.
+- "What phase am I in?" — Check `.mission/state.json`.
+- "What is my next action?" — Refer to the orchestrator workflow below.
+- "Am I about to summarize instead of act?" — If yes, DELETE that text and take action.
+- "Am I about to end my response?" — Is `active: true`? Then you are NOT done. Continue.
+
+### Failure Signatures (if you catch yourself doing ANY of these, course-correct IMMEDIATELY):
+- Researching for 20+ tool calls without writing `.mission/plan.md`
+- Explaining your research findings to the user instead of creating a plan
+- Writing code to source files instead of dispatching Workers
+- Ending your response while the mission state shows `active: true`
+- Asking "should I continue?" or "what next?"
+- Summarizing what an agent did instead of taking the next step in the loop
+- Starting work unrelated to the mission task
+- Forgetting to update `.mission/state.json` at phase transitions
+
 ## Resume Protocol
 
 If `.mission/state.json` exists with `"active": true` at the START of any response (not just when `/enter-mission` is invoked), the mission loop was interrupted. You MUST resume immediately:
@@ -189,6 +222,14 @@ The Orchestrator MUST manage the phase lock at every transition:
 
 **If you stop mid-loop and wait for user input, you have FAILED the auto-continuation protocol.**
 
+### Why You Must Not Stop
+
+When you dispatch a Worker or Validator agent, the Agent tool is **synchronous** — your response is blocked until the agent completes. When control returns to you, you have the agent's result. The ONLY correct action is to immediately take the next step in the mission loop. There is ZERO reason to stop and ask the user.
+
+The hooks are watching. After every Agent call, the PostToolUse hook injects `[MISSION ACTIVE — MANDATORY CONTINUATION]` with explicit instructions for your next action. Follow them.
+
+If you find yourself writing "Let me summarize what was accomplished..." or "The worker has completed..." — **DELETE THAT TEXT** and instead update state.json and dispatch the next agent.
+
 ### Dispatch Workers
 - For each sub-task, use the Agent tool:
   - `subagent_type: "mission-worker"`
@@ -287,6 +328,24 @@ The phase guard hook (`hooks/phase-guard.sh`) enforces these defense layers at t
 | 5 | Anti-Premature-Completion | Relentless integrity | Completion in relentless mode when report says FAIL |
 
 These defenses stack with the existing v0.2.0 defenses (phase lock, relentless deactivation block, phase transition validation).
+
+### Skill Adherence Hooks (v0.5.0)
+
+Two additional hooks enforce skill adherence by injecting reminders into the model's context, preventing the #1 failure mode (forgetting the skill after extensive research):
+
+| Hook | Event | Fires On | Purpose |
+|------|-------|----------|---------|
+| `mission-reminder.sh` | PreToolUse | Read, Write, Edit, Bash, Agent, Grep, Glob | Injects `[MISSION SKILL ACTIVE — DO NOT DEVIATE]` BEFORE every tool call. Orchestrator-only — silent for workers/validators. |
+| `mission-continue.sh` | PostToolUse | Read, Write, Edit, Bash, Agent, Grep, Glob | Injects `[MISSION ACTIVE]` AFTER every tool call. Strongest after Agent calls with explicit next-step instructions. Orchestrator-focused. |
+
+These hooks ensure that even after 20+ Read/Grep/Glob research calls, the model's context always contains a fresh reminder that:
+1. The mission skill is active
+2. What the current task and phase are
+3. What the next action should be
+
+**For the Orchestrator:** You will see `[MISSION SKILL ACTIVE — DO NOT DEVIATE]` before tool calls and `[MISSION ACTIVE]` / `[MISSION ACTIVE — MANDATORY CONTINUATION]` after them. These are your guardrails. FOLLOW THEM.
+
+**For Workers/Validators:** Reminders are suppressed to avoid confusion. Phase-guard enforcement remains active.
 
 ## User Intervention
 

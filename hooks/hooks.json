@@ -9,15 +9,24 @@
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/phase-guard.sh\" \"$TOOL_NAME\" \"$TOOL_INPUT\""
           }
         ]
+      },
+      {
+        "matcher": "Read|Write|Edit|Bash|Agent|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/mission-reminder.sh\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Agent",
+        "matcher": "Read|Write|Edit|Bash|Agent|Grep|Glob",
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/mission-continue.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/mission-continue.sh\" \"$TOOL_NAME\""
           }
         ]
       }
