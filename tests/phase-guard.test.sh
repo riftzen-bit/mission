@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# tests/phase-guard.test.sh — Tests for hooks/phase-guard.sh
+# tests/phase-guard.test.sh — Tests for hooks/phase-guard.py (Python v1.0)
 # Run: bash tests/phase-guard.test.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-GUARD_SCRIPT="$PROJECT_DIR/hooks/phase-guard.sh"
 TEST_DIR=$(mktemp -d)
 PASSED=0
 FAILED=0
@@ -32,13 +31,115 @@ create_state() {
 STATEEOF
 }
 
-# Helper: run phase-guard and capture exit code + output
+# Helper: create state with extended fields (v2)
+# Usage: create_state_v2 <phase> <active> <persistence> <strictPhaseLock> <phaseLockPhase> <phaseLockTimestamp>
+create_state_v2() {
+  local phase="$1"
+  local active="${2:-true}"
+  local persistence="${3:-standard}"
+  local strict_phase_lock="${4:-false}"
+  local phase_lock_phase="${5:-}"
+  local phase_lock_timestamp="${6:-2026-03-28T10:05:00Z}"
+  mkdir -p "$TEST_DIR/.mission"
+
+  local phase_lock_json="null"
+  if [ -n "$phase_lock_phase" ]; then
+    phase_lock_json=$(cat <<PEOF
+{
+    "phase": "$phase_lock_phase",
+    "lockedAt": "$phase_lock_timestamp",
+    "lockedBy": "orchestrator"
+  }
+PEOF
+)
+  fi
+
+  cat > "$TEST_DIR/.mission/state.json" <<STATEEOF
+{
+  "active": $active,
+  "phase": "$phase",
+  "task": "test task",
+  "round": 1,
+  "persistence": "$persistence",
+  "strictPhaseLock": $strict_phase_lock,
+  "phaseLock": $phase_lock_json
+}
+STATEEOF
+}
+
+# Helper: create state with v3 fields (round)
+# Usage: create_state_v3 <phase> <active> <persistence> <strictPhaseLock> <phaseLockPhase> <round>
+create_state_v3() {
+  local phase="$1"
+  local active="${2:-true}"
+  local persistence="${3:-standard}"
+  local strict_phase_lock="${4:-false}"
+  local phase_lock_phase="${5:-}"
+  local round="${6:-1}"
+  mkdir -p "$TEST_DIR/.mission"
+  mkdir -p "$TEST_DIR/.mission/reports"
+
+  local phase_lock_json="null"
+  if [ -n "$phase_lock_phase" ]; then
+    phase_lock_json=$(cat <<PEOF
+{
+    "phase": "$phase_lock_phase",
+    "lockedAt": "2026-03-28T10:05:00Z",
+    "lockedBy": "orchestrator"
+  }
+PEOF
+)
+  fi
+
+  cat > "$TEST_DIR/.mission/state.json" <<STATEEOF
+{
+  "active": $active,
+  "phase": "$phase",
+  "task": "test task",
+  "round": $round,
+  "persistence": "$persistence",
+  "strictPhaseLock": $strict_phase_lock,
+  "phaseLock": $phase_lock_json
+}
+STATEEOF
+  # Clean up from previous test
+  rm -rf "$TEST_DIR/.mission/reports"
+  rm -f "$TEST_DIR/.mission/summary.md"
+  rm -rf "$TEST_DIR/.mission/worker-logs"
+  mkdir -p "$TEST_DIR/.mission/reports"
+}
+
+# Helper: create a validator report file
+create_report() {
+  local round="$1"
+  local verdict="${2:-PASS}"
+  mkdir -p "$TEST_DIR/.mission/reports"
+  cat > "$TEST_DIR/.mission/reports/round-${round}.md" <<REOF
+# Validator Report — Round $round
+## Verdict: $verdict
+REOF
+}
+
+# Helper: create summary.md
+create_summary() {
+  mkdir -p "$TEST_DIR/.mission"
+  echo "# Mission Summary" > "$TEST_DIR/.mission/summary.md"
+}
+
+# Helper: create a worker log file
+create_worker_log() {
+  local worker_id="$1"
+  mkdir -p "$TEST_DIR/.mission/worker-logs"
+  echo "# Worker $worker_id Output" > "$TEST_DIR/.mission/worker-logs/worker-${worker_id}.md"
+}
+
+# Helper: run phase-guard.py and capture exit code + output
 run_guard() {
   local tool_name="$1"
   local tool_input="$2"
   local output
   local exit_code
-  output=$(cd "$TEST_DIR" && TOOL_NAME="$tool_name" TOOL_INPUT="$tool_input" bash "$GUARD_SCRIPT" "$tool_name" "$tool_input" 2>&1) || exit_code=$?
+  output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "$tool_name" "$tool_input" 2>&1) || exit_code=$?
   exit_code=${exit_code:-0}
   echo "$output"
   return $exit_code
@@ -80,13 +181,13 @@ assert_allowed() {
   fi
 }
 
-echo "=== Phase Guard Tests ==="
+echo "=== Phase Guard Tests (Python v1.0) ==="
 echo ""
 
 # ─────────────────────────────────────────────
-# TEST GROUP: No mission active
+# TEST GROUP: Missing args / no mission
 # ─────────────────────────────────────────────
-echo "--- No mission active ---"
+echo "--- Missing args / no mission ---"
 
 rm -rf "$TEST_DIR/.mission"
 assert_allowed "No state file → Write allowed" "Write" '{"file_path":"/tmp/foo.ts"}'
@@ -105,7 +206,7 @@ echo "--- Orchestrator phase ---"
 
 create_state "orchestrator"
 assert_allowed "Orch: Write to .mission/plan.md" "Write" '{"file_path":".mission/plan.md"}'
-assert_allowed "Orch: Write to .mission/state.json" "Write" '{"file_path":".mission/state.json"}'
+assert_allowed "Orch: Write to .mission/state.json" "Write" '{"file_path":".mission/state.json","content":"{\"active\": true}"}'
 assert_blocked "Orch: Write to src/index.ts" "Write" '{"file_path":"src/index.ts"}'
 assert_blocked "Orch: Write to app.py" "Write" '{"file_path":"app.py"}'
 assert_allowed "Orch: Edit .mission/plan.md" "Edit" '{"file_path":".mission/plan.md"}'
@@ -178,6 +279,41 @@ assert_allowed "Validator: Agent sub-validator" "Agent" '{"subagent_type":"missi
 assert_allowed "Validator: Agent explore" "Agent" '{"subagent_type":"Explore"}'
 
 # ─────────────────────────────────────────────
+# TEST GROUP: MultiEdit tool coverage
+# ─────────────────────────────────────────────
+echo ""
+echo "--- MultiEdit tool coverage ---"
+
+create_state "orchestrator"
+assert_allowed "MultiEdit Orch: Write .mission/plan.md" "MultiEdit" '{"file_path":".mission/plan.md"}'
+assert_blocked "MultiEdit Orch: Write src/index.ts" "MultiEdit" '{"file_path":"src/index.ts"}'
+
+create_state "worker"
+assert_allowed "MultiEdit Worker: Write src/index.ts" "MultiEdit" '{"file_path":"src/index.ts"}'
+assert_blocked "MultiEdit Worker: Write .mission/state.json" "MultiEdit" '{"file_path":".mission/state.json"}'
+assert_allowed "MultiEdit Worker: Write .mission/worker-logs/w1.md" "MultiEdit" '{"file_path":".mission/worker-logs/w1.md"}'
+assert_blocked "MultiEdit Worker: Write test file" "MultiEdit" '{"file_path":"src/index.test.ts"}'
+
+create_state "validator"
+assert_allowed "MultiEdit Validator: Write test file" "MultiEdit" '{"file_path":"src/index.test.ts"}'
+assert_allowed "MultiEdit Validator: Write report" "MultiEdit" '{"file_path":".mission/reports/round-1.md"}'
+assert_blocked "MultiEdit Validator: Write source file" "MultiEdit" '{"file_path":"src/index.ts"}'
+assert_blocked "MultiEdit Validator: Write .mission/state.json" "MultiEdit" '{"file_path":".mission/state.json"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Unknown phase → BLOCK
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Unknown phase → BLOCK ---"
+
+create_state "hacking"
+assert_blocked "Unknown phase: Write → BLOCK" "Write" '{"file_path":"src/index.ts"}'
+assert_blocked "Unknown phase: Bash → BLOCK" "Bash" '{"command":"ls"}'
+assert_blocked "Unknown phase: Agent → BLOCK" "Agent" '{"subagent_type":"mission-worker"}'
+assert_blocked "Unknown phase: Edit → BLOCK" "Edit" '{"file_path":"src/index.ts"}'
+assert_blocked "Unknown phase: MultiEdit → BLOCK" "MultiEdit" '{"file_path":"src/index.ts"}'
+
+# ─────────────────────────────────────────────
 # TEST GROUP: Edge cases
 # ─────────────────────────────────────────────
 echo ""
@@ -197,6 +333,24 @@ assert_allowed "Validator: Write _spec.rb file" "Write" '{"file_path":"spec/mode
 assert_blocked "Validator: Write package.json" "Write" '{"file_path":"package.json"}'
 
 # ─────────────────────────────────────────────
+# TEST GROUP: Empty/null file_path → ALLOW
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Empty/null file_path → ALLOW ---"
+
+create_state "orchestrator"
+assert_allowed "Orch: Write with empty file_path" "Write" '{"file_path":""}'
+assert_allowed "Orch: Write with no file_path key" "Write" '{"content":"hello"}'
+
+create_state "worker"
+assert_allowed "Worker: Write with empty file_path" "Write" '{"file_path":""}'
+assert_allowed "Worker: Edit with empty file_path" "Edit" '{"file_path":""}'
+
+create_state "validator"
+assert_allowed "Validator: Write with empty file_path" "Write" '{"file_path":""}'
+assert_allowed "Validator: Edit with empty file_path" "Edit" '{"file_path":""}'
+
+# ─────────────────────────────────────────────
 # TEST GROUP: Path traversal attacks
 # ─────────────────────────────────────────────
 echo ""
@@ -214,7 +368,7 @@ assert_blocked "Validator: Write source via traversal" "Write" '{"file_path":"te
 assert_allowed "Validator: Write test file via normalized path" "Write" '{"file_path":"src/../tests/test_main.py"}'
 
 # ─────────────────────────────────────────────
-# TEST GROUP: Symlink attacks (skip on Windows — symlinks require special permissions)
+# TEST GROUP: Symlink attacks
 # ─────────────────────────────────────────────
 echo ""
 if ln -sf "$TEST_DIR/.mission" "$TEST_DIR/__symlink_test__" 2>/dev/null && [ -L "$TEST_DIR/__symlink_test__" ]; then
@@ -234,7 +388,7 @@ if ln -sf "$TEST_DIR/.mission" "$TEST_DIR/__symlink_test__" 2>/dev/null && [ -L 
   assert_blocked "Worker: Write via symlink to .mission/plan.md → BLOCK" "Write" "{\"file_path\":\"$TEST_DIR/fake-source.ts\"}"
   rm -f "$TEST_DIR/fake-source.ts"
 
-  # Validator: symlink to source file → BLOCK
+  # Validator: symlink from test to source → BLOCK
   create_state "validator"
   echo "source" > "$TEST_DIR/src-file.ts"
   ln -sf "$TEST_DIR/src-file.ts" "$TEST_DIR/fake-test.test.ts"
@@ -251,6 +405,41 @@ else
   rm -rf "$TEST_DIR/__symlink_test__"
   echo "--- Symlink attacks (SKIPPED — symlinks not supported on this platform) ---"
 fi
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Wrapped test commands (sh -c "npm test")
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Wrapped test commands ---"
+
+create_state "worker"
+assert_blocked "Worker: Bash sh -c 'npm test'" "Bash" '{"command":"sh -c \"npm test\""}'
+assert_blocked "Worker: Bash bash -c 'pytest'" "Bash" "{\"command\":\"bash -c 'pytest -xvs'\"}"
+assert_blocked "Worker: Bash sh -c 'npx jest --coverage'" "Bash" "{\"command\":\"sh -c 'npx jest --coverage'\"}"
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Chained test commands (cd src && npm test)
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Chained test commands ---"
+
+create_state "worker"
+assert_blocked "Worker: Bash cd src && npm test" "Bash" '{"command":"cd src && npm test"}'
+assert_blocked "Worker: Bash cd /project && pytest" "Bash" '{"command":"cd /project && pytest"}'
+assert_blocked "Worker: Bash cd app && npx jest" "Bash" '{"command":"cd app && npx jest"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: npm run test:* patterns
+# ─────────────────────────────────────────────
+echo ""
+echo "--- npm run test:* patterns ---"
+
+create_state "worker"
+assert_blocked "Worker: Bash npm run test:unit" "Bash" '{"command":"npm run test:unit"}'
+assert_blocked "Worker: Bash npm run test:integration" "Bash" '{"command":"npm run test:integration"}'
+assert_blocked "Worker: Bash yarn test:e2e" "Bash" '{"command":"yarn test:e2e"}'
+assert_blocked "Worker: Bash pnpm test:smoke" "Bash" '{"command":"pnpm test:smoke"}'
+assert_blocked "Worker: Bash npm test (basic)" "Bash" '{"command":"npm test"}'
 
 # ─────────────────────────────────────────────
 # TEST GROUP: Bug fixes regression
@@ -293,45 +482,6 @@ assert_blocked "Validator: Edit .mission/state.json" "Edit" '{"file_path":".miss
 assert_allowed "Validator: Write .mission/reports/round-1.md" "Write" '{"file_path":".mission/reports/round-1.md"}'
 
 # ─────────────────────────────────────────────
-# Helper: create state with extended fields (v2)
-# ─────────────────────────────────────────────
-# Usage: create_state_v2 <phase> <active> <persistence> <strictPhaseLock> <phaseLockPhase> <phaseLockTimestamp>
-create_state_v2() {
-  local phase="$1"
-  local active="${2:-true}"
-  local persistence="${3:-standard}"
-  local strict_phase_lock="${4:-false}"
-  local phase_lock_phase="${5:-}"
-  local phase_lock_timestamp="${6:-2026-03-28T10:05:00Z}"
-  mkdir -p "$TEST_DIR/.mission"
-
-  # Build phaseLock block conditionally
-  local phase_lock_json="null"
-  if [ -n "$phase_lock_phase" ]; then
-    phase_lock_json=$(cat <<PEOF
-{
-    "phase": "$phase_lock_phase",
-    "lockedAt": "$phase_lock_timestamp",
-    "lockedBy": "orchestrator"
-  }
-PEOF
-)
-  fi
-
-  cat > "$TEST_DIR/.mission/state.json" <<STATEEOF
-{
-  "active": $active,
-  "phase": "$phase",
-  "task": "test task",
-  "round": 1,
-  "persistence": "$persistence",
-  "strictPhaseLock": $strict_phase_lock,
-  "phaseLock": $phase_lock_json
-}
-STATEEOF
-}
-
-# ─────────────────────────────────────────────
 # TEST GROUP: Phase Lock Validation
 # ─────────────────────────────────────────────
 echo ""
@@ -354,7 +504,6 @@ create_state_v2 "worker" "true" "standard" "false" "orchestrator"
 assert_allowed "PhaseLock: strict=false, phase=worker, lock=orchestrator → ALLOW" "Write" '{"file_path":"src/index.ts"}'
 
 # strictPhaseLock missing but phaseLock has mismatched phase — defaults to strict=true, so BLOCK
-# (Issue 2 fix: strictPhaseLock now defaults to true per docs, so missing field = strict enforcement)
 mkdir -p "$TEST_DIR/.mission"
 cat > "$TEST_DIR/.mission/state.json" <<STATEEOF
 {
@@ -424,7 +573,6 @@ create_state_v2 "orchestrator" "true" "standard" "false" ""
 assert_allowed "Standard: Write active=false without completedAt → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false}"}'
 
 # Missing persistence field — defaults to "relentless" per docs, so active=false without completedAt is BLOCKED
-# (Issue 1 fix: persistence now defaults to "relentless" instead of "standard")
 create_state "orchestrator"
 assert_blocked "No persistence field: Write active=false without completedAt → BLOCK (default relentless)" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false}"}'
 
@@ -443,6 +591,54 @@ assert_blocked "Relentless: Write active:false (no space) without completedAt �
 # Cautious mode: allow deactivation (only relentless blocks)
 create_state_v2 "orchestrator" "true" "cautious" "false" ""
 assert_allowed "Cautious: Write active=false → ALLOW (only relentless blocks)" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false}"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: endedAt bypass
+# ─────────────────────────────────────────────
+echo ""
+echo "--- endedAt bypass ---"
+
+# endedAt without completedAt → ALLOW (force-exit bypass) — even in relentless mode
+create_state_v2 "orchestrator" "true" "relentless" "false" ""
+assert_allowed "endedAt bypass: Write active=false + endedAt in relentless → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"endedAt\": \"2026-03-28T12:00:00Z\"}"}'
+
+# endedAt bypass works with Edit too
+create_state_v2 "orchestrator" "true" "relentless" "false" ""
+assert_allowed "endedAt bypass: Edit with endedAt → ALLOW" "Edit" '{"file_path":".mission/state.json","new_string":"\"active\": false, \"endedAt\": \"2026-03-28T12:00:00Z\""}'
+
+# endedAt bypass does NOT apply when completedAt is also present
+create_state_v2 "orchestrator" "true" "relentless" "false" ""
+# Clean up leftover artifacts from previous tests so cleanup guard will trigger
+rm -f "$TEST_DIR/.mission/summary.md"
+rm -rf "$TEST_DIR/.mission/worker-logs"
+rm -rf "$TEST_DIR/.mission/reports"
+assert_blocked "endedAt bypass: Write with both endedAt and completedAt → still check guards" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"endedAt\": \"2026-03-28T12:00:00Z\", \"completedAt\": \"2026-03-28T12:00:00Z\"}"}'
+
+# endedAt bypass in standard mode
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_allowed "endedAt bypass: standard mode → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"endedAt\": \"2026-03-28T12:00:00Z\"}"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Edit new_string field check
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Edit new_string field check ---"
+
+# Edit with new_string that sets phase
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_allowed "Edit new_string: orchestrator → worker via new_string" "Edit" '{"file_path":".mission/state.json","new_string":"\"phase\": \"worker\""}'
+
+# Edit with new_string that sets unknown phase → BLOCK
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_blocked "Edit new_string: unknown phase → BLOCK" "Edit" '{"file_path":".mission/state.json","new_string":"\"phase\": \"badphase\""}'
+
+# Edit with new_string active=false in relentless → BLOCK
+create_state_v2 "orchestrator" "true" "relentless" "false" ""
+assert_blocked "Edit new_string: relentless active=false → BLOCK" "Edit" '{"file_path":".mission/state.json","new_string":"\"active\": false"}'
+
+# Edit with new_str field (alternative key name)
+create_state_v2 "orchestrator" "true" "relentless" "false" ""
+assert_blocked "Edit new_str: relentless active=false → BLOCK" "Edit" '{"file_path":".mission/state.json","new_str":"\"active\": false"}'
 
 # ─────────────────────────────────────────────
 # TEST GROUP: Phase transition validation
@@ -477,8 +673,6 @@ assert_blocked "Transition: orchestrator → unknown phase 'hacking' → BLOCK" 
 
 # Invalid transition: worker → complete (only orchestrator can complete)
 create_state_v2 "worker" "true" "standard" "false" ""
-# Note: worker can't write state.json (blocked by phase enforcement below),
-# but the transition check runs first as defense-in-depth
 assert_blocked "Transition: worker → complete → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
 
 # Invalid transition: validator → worker
@@ -489,14 +683,12 @@ assert_blocked "Transition: validator → worker → BLOCK" "Write" '{"file_path
 create_state_v2 "worker" "true" "standard" "false" ""
 assert_blocked "Transition: worker → orchestrator → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"orchestrator\", \"active\": true}"}'
 
-# Valid transition: worker → validator
+# Valid transition: worker → validator (but worker can't write state.json)
 create_state_v2 "worker" "true" "standard" "false" ""
-# Note: worker can't write state.json (phase enforcement), but transition check itself allows it
 assert_blocked "Transition: worker → validator via Write state.json → BLOCK (worker can't write state.json)" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"validator\", \"active\": true}"}'
 
-# Valid transition: validator → orchestrator
+# Valid transition: validator → orchestrator (but validator can't write state.json)
 create_state_v2 "validator" "true" "standard" "false" ""
-# Note: validator can't write state.json either, blocked by phase enforcement
 assert_blocked "Transition: validator → orchestrator via Write state.json → BLOCK (validator can't write state.json)" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"orchestrator\", \"active\": true}"}'
 
 # No phase in content → transition check skipped, normal rules apply
@@ -510,6 +702,174 @@ assert_allowed "Transition: Edit with phase via regex → orchestrator → worke
 # Edit with unknown phase via regex fallback
 create_state_v2 "orchestrator" "true" "standard" "false" ""
 assert_blocked "Transition: Edit with unknown phase via regex → BLOCK" "Edit" '{"file_path":".mission/state.json","new_string":"\"phase\": \"badphase\""}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Completion guard
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Completion guard ---"
+
+# Complete without report → BLOCK
+create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
+assert_blocked "Complete: no report exists → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# Complete with report (standard mode) → ALLOW
+create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
+create_report 1 "PASS"
+assert_allowed "Complete: report exists (standard) → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# Complete with FAIL report (standard mode) → ALLOW (standard doesn't check content)
+create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
+create_report 1 "FAIL"
+assert_allowed "Complete: FAIL report (standard) → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# Complete with PASS report (relentless) → ALLOW
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+create_report 1 "PASS"
+assert_allowed "Complete: PASS report (relentless) → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# Complete with FAIL report (relentless) → BLOCK
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+create_report 1 "FAIL"
+assert_blocked "Complete: FAIL report (relentless) → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# Complete with empty report (relentless) → BLOCK (no Verdict: PASS found)
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+mkdir -p "$TEST_DIR/.mission/reports"
+echo "" > "$TEST_DIR/.mission/reports/round-1.md"
+assert_blocked "Complete: empty report (relentless) → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# Complete round 2 with report for round 2 → ALLOW
+create_state_v3 "orchestrator" "true" "standard" "false" "" "2"
+create_report 2 "PASS"
+assert_allowed "Complete: round 2 with round-2 report → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# Complete round 2 but only round 1 report exists → BLOCK (report must match current round)
+create_state_v3 "orchestrator" "true" "standard" "false" "" "2"
+create_report 1 "PASS"
+assert_blocked "Complete: round 2 but only round-1 report → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Mandatory cleanup guard
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Mandatory cleanup guard ---"
+
+# Deactivate without summary.md → BLOCK
+create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
+create_report 1 "PASS"
+mkdir -p "$TEST_DIR/.mission/worker-logs"
+assert_blocked "Cleanup: no summary.md → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
+
+# Deactivate with summary but leftover worker-logs → BLOCK
+create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
+create_report 1 "PASS"
+create_summary
+create_worker_log 1
+assert_blocked "Cleanup: summary exists but worker-logs not cleaned → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
+
+# Deactivate with summary and empty worker-logs → ALLOW
+create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
+create_report 1 "PASS"
+create_summary
+mkdir -p "$TEST_DIR/.mission/worker-logs"
+assert_allowed "Cleanup: summary exists, worker-logs clean → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
+
+# Cleanup applies in relentless mode too (no summary)
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+create_report 1 "PASS"
+mkdir -p "$TEST_DIR/.mission/worker-logs"
+assert_blocked "Cleanup: relentless mode, no summary → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
+
+# Cleanup with everything correct in relentless mode
+create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
+create_report 1 "PASS"
+create_summary
+mkdir -p "$TEST_DIR/.mission/worker-logs"
+assert_allowed "Cleanup: relentless, summary + clean logs → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
+
+# Force-exit (no completedAt) in standard mode → ALLOW (no cleanup needed)
+create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
+assert_allowed "Cleanup: force-exit (no completedAt) in standard → ALLOW (no cleanup needed)" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"phase\": \"orchestrator\"}"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Worker test file block
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Worker test file block ---"
+
+create_state "worker"
+assert_blocked "Worker: Write src/index.test.ts → BLOCK" "Write" '{"file_path":"src/index.test.ts"}'
+assert_blocked "Worker: Write src/app.spec.ts → BLOCK" "Write" '{"file_path":"src/app.spec.ts"}'
+assert_blocked "Worker: Write tests/test_main.py → BLOCK" "Write" '{"file_path":"tests/test_main.py"}'
+assert_blocked "Worker: Write __tests__/app.js → BLOCK" "Write" '{"file_path":"__tests__/app.js"}'
+assert_blocked "Worker: Write main_test.go → BLOCK" "Write" '{"file_path":"main_test.go"}'
+assert_blocked "Worker: Edit src/index.test.ts → BLOCK" "Edit" '{"file_path":"src/index.test.ts"}'
+assert_allowed "Worker: Write src/index.ts (not test) → ALLOW" "Write" '{"file_path":"src/index.ts"}'
+assert_allowed "Worker: Write .mission/worker-logs/worker-1.md (not blocked by test guard) → ALLOW" "Write" '{"file_path":".mission/worker-logs/worker-1.md"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Validator .mission/ restriction
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Validator .mission/ restriction ---"
+
+create_state "validator"
+assert_allowed "Validator: Write .mission/reports/round-1.md → ALLOW" "Write" '{"file_path":".mission/reports/round-1.md"}'
+assert_allowed "Validator: Write .mission/reports/round-5.md → ALLOW" "Write" '{"file_path":".mission/reports/round-5.md"}'
+assert_blocked "Validator: Write .mission/plan.md → BLOCK" "Write" '{"file_path":".mission/plan.md"}'
+assert_blocked "Validator: Write .mission/summary.md → BLOCK" "Write" '{"file_path":".mission/summary.md"}'
+assert_blocked "Validator: Write .mission/worker-logs/worker-1.md → BLOCK" "Write" '{"file_path":".mission/worker-logs/worker-1.md"}'
+assert_blocked "Validator: Edit .mission/plan.md → BLOCK" "Edit" '{"file_path":".mission/plan.md"}'
+assert_allowed "Validator: Edit .mission/reports/round-1.md → ALLOW" "Edit" '{"file_path":".mission/reports/round-1.md"}'
+
+# ─────────────────────────────────────────────
+# TEST GROUP: Model enforcement
+# ─────────────────────────────────────────────
+echo ""
+echo "--- Model enforcement ---"
+
+# Correct model → ALLOW
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_allowed "Model: correct model opus for worker → ALLOW" "Agent" '{"subagent_type":"mission-worker","model":"opus"}'
+
+# Wrong model → BLOCK
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_blocked "Model: wrong model haiku for worker → BLOCK" "Agent" '{"subagent_type":"mission-worker","model":"haiku"}'
+
+# Missing model → inject with exit 0
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+TOTAL=$((TOTAL + 1))
+output=$(run_guard "Agent" '{"subagent_type":"mission-worker"}' 2>&1) || true
+exit_code=$?
+if [ $exit_code -eq 0 ] && echo "$output" | grep -q '"model"'; then
+  echo "PASS: Model: missing model → inject with exit 0"
+  PASSED=$((PASSED + 1))
+else
+  echo "FAIL: Model: missing model → inject with exit 0"
+  echo "  exit_code=$exit_code output: $output"
+  FAILED=$((FAILED + 1))
+fi
+
+# Correct model for validator → ALLOW
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_allowed "Model: correct model opus for validator → ALLOW" "Agent" '{"subagent_type":"mission-validator","model":"opus"}'
+
+# Wrong model for validator → BLOCK
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_blocked "Model: wrong model haiku for validator → BLOCK" "Agent" '{"subagent_type":"mission-validator","model":"haiku"}'
+
+# Non-mission agent → ALLOW regardless of model
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_allowed "Model: non-mission agent with any model → ALLOW" "Agent" '{"subagent_type":"code-reviewer","model":"haiku"}'
+
+# Case-insensitive model match → ALLOW
+create_state_v2 "orchestrator" "true" "standard" "false" ""
+assert_allowed "Model: case-insensitive OPUS → ALLOW" "Agent" '{"subagent_type":"mission-worker","model":"OPUS"}'
+
+# Model validation only applies in orchestrator phase (worker spawning sub-workers doesn't validate model)
+create_state_v2 "worker" "true" "standard" "false" ""
+assert_allowed "Model: worker phase doesn't validate model" "Agent" '{"subagent_type":"mission-worker","model":"haiku"}'
 
 # ─────────────────────────────────────────────
 # TEST GROUP: Improved error messages
@@ -581,197 +941,6 @@ else
   echo "  output: $output"
   FAILED=$((FAILED + 1))
 fi
-
-# ─────────────────────────────────────────────
-# Helper: create state with v3 fields (round)
-# ─────────────────────────────────────────────
-# Usage: create_state_v3 <phase> <active> <persistence> <strictPhaseLock> <phaseLockPhase> <round>
-create_state_v3() {
-  local phase="$1"
-  local active="${2:-true}"
-  local persistence="${3:-standard}"
-  local strict_phase_lock="${4:-false}"
-  local phase_lock_phase="${5:-}"
-  local round="${6:-1}"
-  mkdir -p "$TEST_DIR/.mission"
-  mkdir -p "$TEST_DIR/.mission/reports"
-
-  # Build phaseLock block conditionally
-  local phase_lock_json="null"
-  if [ -n "$phase_lock_phase" ]; then
-    phase_lock_json=$(cat <<PEOF
-{
-    "phase": "$phase_lock_phase",
-    "lockedAt": "2026-03-28T10:05:00Z",
-    "lockedBy": "orchestrator"
-  }
-PEOF
-)
-  fi
-
-  cat > "$TEST_DIR/.mission/state.json" <<STATEEOF
-{
-  "active": $active,
-  "phase": "$phase",
-  "task": "test task",
-  "round": $round,
-  "persistence": "$persistence",
-  "strictPhaseLock": $strict_phase_lock,
-  "phaseLock": $phase_lock_json
-}
-STATEEOF
-  # Clean up reports/summary/worker-logs from previous test
-  rm -rf "$TEST_DIR/.mission/reports"
-  rm -f "$TEST_DIR/.mission/summary.md"
-  rm -rf "$TEST_DIR/.mission/worker-logs"
-  mkdir -p "$TEST_DIR/.mission/reports"
-}
-
-# Helper: create a validator report file
-create_report() {
-  local round="$1"
-  local verdict="${2:-PASS}"
-  mkdir -p "$TEST_DIR/.mission/reports"
-  cat > "$TEST_DIR/.mission/reports/round-${round}.md" <<REOF
-# Validator Report — Round $round
-## Verdict: $verdict
-REOF
-}
-
-# Helper: create summary.md
-create_summary() {
-  mkdir -p "$TEST_DIR/.mission"
-  echo "# Mission Summary" > "$TEST_DIR/.mission/summary.md"
-}
-
-# Helper: create a worker log file
-create_worker_log() {
-  local worker_id="$1"
-  mkdir -p "$TEST_DIR/.mission/worker-logs"
-  echo "# Worker $worker_id Output" > "$TEST_DIR/.mission/worker-logs/worker-${worker_id}.md"
-}
-
-# ─────────────────────────────────────────────
-# TEST GROUP: Completion guard
-# ─────────────────────────────────────────────
-echo ""
-echo "--- Completion guard ---"
-
-# Complete without report → BLOCK
-create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
-assert_blocked "Complete: no report exists → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# Complete with report (standard mode) → ALLOW
-create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
-create_report 1 "PASS"
-assert_allowed "Complete: report exists (standard) → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# Complete with FAIL report (standard mode) → ALLOW (standard doesn't check content)
-create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
-create_report 1 "FAIL"
-assert_allowed "Complete: FAIL report (standard) → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# Complete with PASS report (relentless) → ALLOW
-create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
-create_report 1 "PASS"
-assert_allowed "Complete: PASS report (relentless) → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# Complete with FAIL report (relentless) → BLOCK
-create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
-create_report 1 "FAIL"
-assert_blocked "Complete: FAIL report (relentless) → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# Complete with empty report (relentless) → BLOCK (no Verdict: PASS found)
-create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
-mkdir -p "$TEST_DIR/.mission/reports"
-echo "" > "$TEST_DIR/.mission/reports/round-1.md"
-assert_blocked "Complete: empty report (relentless) → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# Complete round 2 with report for round 2 → ALLOW
-create_state_v3 "orchestrator" "true" "standard" "false" "" "2"
-create_report 2 "PASS"
-assert_allowed "Complete: round 2 with round-2 report → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# Complete round 2 but only round 1 report exists → BLOCK
-create_state_v3 "orchestrator" "true" "standard" "false" "" "2"
-create_report 1 "PASS"
-assert_blocked "Complete: round 2 but only round-1 report → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"phase\": \"complete\", \"active\": true}"}'
-
-# ─────────────────────────────────────────────
-# TEST GROUP: Mandatory cleanup guard
-# ─────────────────────────────────────────────
-echo ""
-echo "--- Mandatory cleanup guard ---"
-
-# Deactivate without summary.md → BLOCK
-create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
-create_report 1 "PASS"
-mkdir -p "$TEST_DIR/.mission/worker-logs"
-assert_blocked "Cleanup: no summary.md → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
-
-# Deactivate with summary but leftover worker-logs → BLOCK
-create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
-create_report 1 "PASS"
-create_summary
-create_worker_log 1
-assert_blocked "Cleanup: summary exists but worker-logs not cleaned → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
-
-# Deactivate with summary and empty worker-logs → ALLOW
-create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
-create_report 1 "PASS"
-create_summary
-mkdir -p "$TEST_DIR/.mission/worker-logs"
-assert_allowed "Cleanup: summary exists, worker-logs clean → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
-
-# Cleanup applies in relentless mode too (no summary)
-create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
-create_report 1 "PASS"
-mkdir -p "$TEST_DIR/.mission/worker-logs"
-assert_blocked "Cleanup: relentless mode, no summary → BLOCK" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
-
-# Cleanup with everything correct in relentless mode
-create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
-create_report 1 "PASS"
-create_summary
-mkdir -p "$TEST_DIR/.mission/worker-logs"
-assert_allowed "Cleanup: relentless, summary + clean logs → ALLOW" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"completedAt\": \"2026-03-28T12:00:00Z\", \"phase\": \"complete\"}"}'
-
-# Cleanup check does NOT apply to force-exit (active=false without completedAt)
-# In standard mode, active=false without completedAt is allowed (no cleanup needed for force-exit)
-# Note: force-exit sets active=false without phase change, so no completion guard trigger
-create_state_v3 "orchestrator" "true" "standard" "false" "" "1"
-assert_allowed "Cleanup: force-exit (no completedAt) in standard → ALLOW (no cleanup needed)" "Write" '{"file_path":".mission/state.json","content":"{\"active\": false, \"phase\": \"orchestrator\"}"}'
-
-# ─────────────────────────────────────────────
-# TEST GROUP: Worker test file block
-# ─────────────────────────────────────────────
-echo ""
-echo "--- Worker test file block ---"
-
-create_state "worker"
-assert_blocked "Worker: Write src/index.test.ts → BLOCK" "Write" '{"file_path":"src/index.test.ts"}'
-assert_blocked "Worker: Write src/app.spec.ts → BLOCK" "Write" '{"file_path":"src/app.spec.ts"}'
-assert_blocked "Worker: Write tests/test_main.py → BLOCK" "Write" '{"file_path":"tests/test_main.py"}'
-assert_blocked "Worker: Write __tests__/app.js → BLOCK" "Write" '{"file_path":"__tests__/app.js"}'
-assert_blocked "Worker: Write main_test.go → BLOCK" "Write" '{"file_path":"main_test.go"}'
-assert_blocked "Worker: Edit src/index.test.ts → BLOCK" "Edit" '{"file_path":"src/index.test.ts"}'
-assert_allowed "Worker: Write src/index.ts (not test) → ALLOW" "Write" '{"file_path":"src/index.ts"}'
-assert_allowed "Worker: Write .mission/worker-logs/worker-1.md (not blocked by test guard) → ALLOW" "Write" '{"file_path":".mission/worker-logs/worker-1.md"}'
-
-# ─────────────────────────────────────────────
-# TEST GROUP: Validator .mission/ restriction
-# ─────────────────────────────────────────────
-echo ""
-echo "--- Validator .mission/ restriction ---"
-
-create_state "validator"
-assert_allowed "Validator: Write .mission/reports/round-1.md → ALLOW" "Write" '{"file_path":".mission/reports/round-1.md"}'
-assert_allowed "Validator: Write .mission/reports/round-5.md → ALLOW" "Write" '{"file_path":".mission/reports/round-5.md"}'
-assert_blocked "Validator: Write .mission/plan.md → BLOCK" "Write" '{"file_path":".mission/plan.md"}'
-assert_blocked "Validator: Write .mission/summary.md → BLOCK" "Write" '{"file_path":".mission/summary.md"}'
-assert_blocked "Validator: Write .mission/worker-logs/worker-1.md → BLOCK" "Write" '{"file_path":".mission/worker-logs/worker-1.md"}'
-assert_blocked "Validator: Edit .mission/plan.md → BLOCK" "Edit" '{"file_path":".mission/plan.md"}'
-assert_allowed "Validator: Edit .mission/reports/round-1.md → ALLOW" "Edit" '{"file_path":".mission/reports/round-1.md"}'
 
 # ─────────────────────────────────────────────
 # Summary

@@ -2,3 +2,4 @@
 .mission/
 docs/
 .factory/.venv/
+__pycache__/
