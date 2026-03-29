@@ -1043,7 +1043,7 @@ echo "--- Verdict regex precision ---"
 # Report with "Verdict: PASS" → ALLOW completion
 create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
 mkdir -p "$TEST_DIR/.mission/reports"
-echo -e "# Report\n\n## Verdict: PASS\n\nAll good." > "$TEST_DIR/.mission/reports/round-1.md"
+printf "# Report\n\n## Verdict: PASS\n\nAll good." > "$TEST_DIR/.mission/reports/round-1.md"
 TOTAL=$((TOTAL + 1))
 exit_code=0
 cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"active\":true,\"phase\":\"complete\",\"round\":1,\"persistence\":\"relentless\"}"}' >/dev/null 2>&1 || exit_code=$?
@@ -1058,7 +1058,7 @@ fi
 # Report with "Verdict: FAIL" containing word PASS elsewhere → BLOCK
 create_state_v3 "orchestrator" "true" "relentless" "false" "" "1"
 mkdir -p "$TEST_DIR/.mission/reports"
-echo -e "# Report\n\n## Verdict: FAIL\n\nPrevious round had PASS but regression found." > "$TEST_DIR/.mission/reports/round-1.md"
+printf "# Report\n\n## Verdict: FAIL\n\nPrevious round had PASS but regression found." > "$TEST_DIR/.mission/reports/round-1.md"
 TOTAL=$((TOTAL + 1))
 output=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/phase-guard.py" "Write" '{"file_path":"'"$TEST_DIR"'/.mission/state.json","content":"{\"active\":true,\"phase\":\"complete\",\"round\":1,\"persistence\":\"relentless\"}"}' 2>&1) || true
 if echo "$output" | grep -q "BLOCK"; then
