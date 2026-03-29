@@ -1,0 +1,180 @@
+{
+  "groupId": "cross-enforcement",
+  "testedAt": "2026-03-28T22:50:00Z",
+  "isolation": {
+    "repoRoot": "/home/paul/Projects/mission",
+    "testType": "content-check (grep) + CLI execution (bash/python3)",
+    "tempDirs": "Created in /tmp/cross-*-test, cleaned up after each test",
+    "noRepoModifications": true
+  },
+  "toolsUsed": ["bash", "python3", "ripgrep"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Model enforcement hooks validate Agent calls",
+      "status": "pass",
+      "steps": [
+        { "action": "Content check: hooks.json Agent matcher", "expected": "Agent in phase-guard matcher", "observed": "Line 5: matcher includes Agent in phase-guard PreToolUse" },
+        { "action": "Content check: phase-guard model validation logic", "expected": "validate_model imported and called", "observed": "Line 39: import validate_model; Line 249: called with tool_input, state, load_config()" },
+        { "action": "CLI: Agent with correct model (opus)", "expected": "exit 0 ALLOW", "observed": "exit 0, no output" },
+        { "action": "CLI: Agent with wrong model (haiku)", "expected": "exit 1 BLOCK", "observed": "exit 1, BLOCK: Model mismatch for mission-worker — expected opus but got haiku" },
+        { "action": "CLI: Agent with missing model", "expected": "exit 0 with auto-injected model", "observed": "exit 0, output: {\"model\": \"opus\"} injected into tool input JSON" },
+        { "action": "CLI: Non-mission agent (Explore)", "expected": "exit 0 ALLOW, bypass model check", "observed": "exit 0, no model validation" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — CLI test",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-006-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-007",
+      "title": "Context preservation — PreToolUse fires all roles",
+      "status": "pass",
+      "steps": [
+        { "action": "Content check: mission-reminder.py handles worker/validator", "expected": "Worker and validator branches in code", "observed": "Line 92: elif phase == 'worker' → _output_worker(); Line 94: elif phase == 'validator' → _output_validator()" },
+        { "action": "CLI: Worker phase — mission-reminder.py", "expected": "Non-empty output with WORKER phase", "observed": "[MISSION SKILL ACTIVE] | Phase: WORKER | Round: 2 | Feature: feat-1 — Test feature | Directive: Complete your assigned feature..." },
+        { "action": "CLI: Worker phase — mission-continue.py", "expected": "Non-empty output with WORKER phase", "observed": "[MISSION ACTIVE] Phase: WORKER | Round: 2 | Feature: feat-1 — Continue your assigned task." },
+        { "action": "CLI: Validator phase — mission-reminder.py", "expected": "Non-empty output with VALIDATOR phase", "observed": "[MISSION SKILL ACTIVE] | Phase: VALIDATOR | Round: 2 | Feature: feat-1 — Directive: Validate the completed feature..." },
+        { "action": "CLI: Validator phase — mission-continue.py", "expected": "Non-empty output with VALIDATOR phase", "observed": "[MISSION ACTIVE] Phase: VALIDATOR | Round: 2 | Feature: feat-1 — Continue validation." }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — CLI test",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-007-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-008",
+      "title": "Context preservation across 20+ tool calls",
+      "status": "pass",
+      "steps": [
+        { "action": "Simulate 25 sequential hook calls with varying tools", "expected": "Feature ID still present in output", "observed": "Call #25 output contains 'Feature: user-api — Create user CRUD endpoints'" },
+        { "action": "Check STRONGEST output after 25 calls", "expected": "Full recovery context with feature ID", "observed": "Output includes phase, round, persistence, task, workers, feature ID, and next-step instructions" },
+        { "action": "Verify hooks read features.json fresh each invocation", "expected": "Feature context always current", "observed": "Each hook invocation loads features.json independently — no stale state" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — CLI test",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-008-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-011",
+      "title": "Compaction recovery via hooks",
+      "status": "pass",
+      "steps": [
+        { "action": "Content check: mission-continue.py reads features.json", "expected": "features.json loaded", "observed": "Lines 268-269: loads features_path, calls load_features()" },
+        { "action": "Content check: mission-reminder.py reads features.json", "expected": "features.json loaded", "observed": "Lines 78-79: loads features_path, calls load_features()" },
+        { "action": "Content check: SKILL.md compaction recovery protocol", "expected": "Recovery protocol references features.json", "observed": "Line 62: Compaction Recovery Protocol section; Step 2: Re-read .mission/features.json" },
+        { "action": "CLI: Hooks reinject feature state after compaction", "expected": "All 5 recovery fields present", "observed": "✓ Phase (ORCHESTRATOR), ✓ Round (2), ✓ Feature (user-crud), ✓ Persistence (RELENTLESS), ✓ Task (Build auth system)" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — CLI test",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-011-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-012",
+      "title": "Resume protocol covers all scenarios",
+      "status": "pass",
+      "steps": [
+        { "action": "Content check: State machine table in SKILL.md", "expected": "≥ 5 rows covering required scenarios", "observed": "8 rows found in state machine table" },
+        { "action": "Verify scenario coverage", "expected": "orchestrator+no-features, orchestrator+features-no-dispatch, worker+incomplete, validator+no-report, complete+active", "observed": "All 5 scenarios present plus 3 additional (orchestrator+some-dispatched, worker+all-completed, validator+report-exists)" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — content check",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-012-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-013",
+      "title": "Phase-guard enforces all agent role separations",
+      "status": "pass",
+      "steps": [
+        { "action": "CLI: Orchestrator Write src/index.ts", "expected": "BLOCK", "observed": "exit 1: BLOCK — Orchestrator cannot write/edit source files" },
+        { "action": "CLI: Orchestrator Write .mission/features.json", "expected": "ALLOW", "observed": "exit 0: ALLOW" },
+        { "action": "CLI: Worker Write src/index.test.ts", "expected": "BLOCK", "observed": "exit 1: BLOCK — Workers cannot write test files" },
+        { "action": "CLI: Worker Write src/index.ts", "expected": "ALLOW", "observed": "exit 0: ALLOW" },
+        { "action": "CLI: Validator Write src/index.ts", "expected": "BLOCK", "observed": "exit 1: BLOCK — Validators can only write test files and .mission/reports/*" },
+        { "action": "CLI: Validator Write src/index.test.ts", "expected": "ALLOW", "observed": "exit 0: ALLOW" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — CLI test",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-013-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-014",
+      "title": "Relentless mode spans config through completion",
+      "status": "pass",
+      "steps": [
+        { "action": "Content check: Config default persistence", "expected": "relentless in engine.py defaults", "observed": "engine.py line 23: persistence: relentless" },
+        { "action": "Content check: SKILL.md stores persistence from config", "expected": "Persistence read from config → stored in state", "observed": "Lines 116, 131: reads persistence from config, stores in state.json" },
+        { "action": "Content check: Phase-guard reads persistence from state", "expected": "persistence used in completion guards", "observed": "phase-guard.py lines 220, 299, 332, 353: reads persistence, checks relentless for PASS verdict" },
+        { "action": "CLI: Completion without report → BLOCK", "expected": "exit 1", "observed": "exit 1: BLOCK — Cannot complete mission — no validator report found" },
+        { "action": "CLI: Completion with FAIL report → BLOCK", "expected": "exit 1 (relentless requires PASS)", "observed": "exit 1: BLOCK — Relentless mode — cannot complete mission while validator report says FAIL" },
+        { "action": "CLI: Completion with PASS report → ALLOW", "expected": "exit 0", "observed": "exit 0: ALLOW" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — CLI + content check",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-014-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-015",
+      "title": "Exit-mission bypasses all guards",
+      "status": "pass",
+      "steps": [
+        { "action": "CLI: completedAt without summary → BLOCK", "expected": "exit 1 (cleanup guard enforced)", "observed": "exit 1: BLOCK — Cannot deactivate — .mission/summary.md not found" },
+        { "action": "CLI: endedAt without completedAt → ALLOW (bypass)", "expected": "exit 0 (all guards bypassed)", "observed": "exit 0: ALLOW — no cleanup checks applied" },
+        { "action": "CLI: Both endedAt AND completedAt → BLOCK", "expected": "exit 1 (completedAt triggers enforcement)", "observed": "exit 1: BLOCK — guards enforced because completedAt present" },
+        { "action": "Content check: phase-guard.py endedAt logic", "expected": "Distinct endedAt vs completedAt paths", "observed": "Lines 267-268: endedAt without completedAt → force-exit bypass; both present → enforce" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — CLI test",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-015-evidence.txt"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-016",
+      "title": "Mission-status reads features for dashboard",
+      "status": "pass",
+      "steps": [
+        { "action": "Content check: mission-status.md references features.json", "expected": "features.json referenced for per-feature progress", "observed": "9 references to features.json found in mission-status.md" },
+        { "action": "Verify per-feature progress display", "expected": "Feature Progress section with per-feature status", "observed": "Line 33: 'Feature Progress (from features.json)' with feature ID, status (completed/in-progress/pending/failed), description, and summary line" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A — content check",
+        "network": "N/A",
+        "files": ["polish/cross-enforcement/VAL-CROSS-016-evidence.txt"]
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 9 assertions: 9 passed, 0 failed. All cross-area enforcement flows verified: model enforcement (VAL-CROSS-006), context preservation for all roles (VAL-CROSS-007), feature context across 20+ tool calls (VAL-CROSS-008), compaction recovery (VAL-CROSS-011), resume protocol state machine (VAL-CROSS-012), role separation enforcement (VAL-CROSS-013), relentless mode chain (VAL-CROSS-014), exit-mission bypass (VAL-CROSS-015), and mission-status features dashboard (VAL-CROSS-016)."
+}

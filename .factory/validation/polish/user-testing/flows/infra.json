@@ -1,0 +1,118 @@
+{
+  "groupId": "infra",
+  "testedAt": "2026-03-28T12:00:00Z",
+  "isolation": {
+    "repoRoot": "/home/paul/Projects/mission",
+    "type": "read-only file/content inspection + CLI execution",
+    "services": "none"
+  },
+  "toolsUsed": ["python3", "ripgrep", "bash"],
+  "assertions": [
+    {
+      "id": "VAL-INFRA-001",
+      "title": "plugin.json version 1.0.0",
+      "status": "pass",
+      "steps": [
+        { "action": "Parse .claude-plugin/plugin.json with python3 json.load()", "expected": "version field equals '1.0.0'", "observed": "version is '1.0.0'" },
+        { "action": "Exit code check", "expected": "exit 0", "observed": "exit 0" }
+      ],
+      "evidence": {
+        "logs": ["polish/infra/VAL-INFRA-001-version-check.txt"],
+        "exitCode": 0,
+        "output": "PASS: plugin.json version is 1.0.0"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-INFRA-002",
+      "title": "package.json version 1.0.0",
+      "status": "pass",
+      "steps": [
+        { "action": "Parse package.json with python3 json.load()", "expected": "version field equals '1.0.0'", "observed": "version is '1.0.0'" },
+        { "action": "Exit code check", "expected": "exit 0", "observed": "exit 0" }
+      ],
+      "evidence": {
+        "logs": ["polish/infra/VAL-INFRA-002-version-check.txt"],
+        "exitCode": 0,
+        "output": "PASS: package.json version is 1.0.0"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-INFRA-005",
+      "title": "CI runs ALL test files",
+      "status": "pass",
+      "steps": [
+        { "action": "Grep for 'mission-reminder.test.sh' in .github/workflows/ci.yml", "expected": "At least 1 match", "observed": "1 match found" },
+        { "action": "Verify CI step exists", "expected": "bash tests/mission-reminder.test.sh in CI", "observed": "Step 'Run mission-reminder tests' runs 'bash tests/mission-reminder.test.sh'" }
+      ],
+      "evidence": {
+        "logs": ["polish/infra/VAL-INFRA-005-ci-reminder-test.txt"],
+        "grepCount": 1,
+        "matchedLine": "run: bash tests/mission-reminder.test.sh"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-INFRA-006",
+      "title": "CI runs Python tests",
+      "status": "pass",
+      "steps": [
+        { "action": "Grep for 'pytest|test_engine' in .github/workflows/ci.yml", "expected": "At least 1 match", "observed": "4 matches found" },
+        { "action": "Verify pytest step", "expected": "pytest or test_engine referenced in CI", "observed": "Step 'Run Python unit tests (pytest)' runs 'python3 -m pytest tests/test_engine.py -v'" }
+      ],
+      "evidence": {
+        "logs": ["polish/infra/VAL-INFRA-006-ci-pytest.txt"],
+        "grepCount": 4,
+        "matchedLines": ["pip install pytest", "python3 -m pytest tests/test_engine.py -v"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-INFRA-012",
+      "title": "plugin.json lists all agents",
+      "status": "pass",
+      "steps": [
+        { "action": "Parse .claude-plugin/plugin.json agents array with python3", "expected": "len(agents) == 3", "observed": "agents has 3 entries" },
+        { "action": "Verify agent paths", "expected": "orchestrator, worker, validator agents listed", "observed": "['./agents/orchestrator.md', './agents/worker.md', './agents/validator.md']" }
+      ],
+      "evidence": {
+        "logs": ["polish/infra/VAL-INFRA-012-agents-count.txt"],
+        "exitCode": 0,
+        "agentCount": 3,
+        "agents": ["./agents/orchestrator.md", "./agents/worker.md", "./agents/validator.md"]
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-INFRA-013",
+      "title": "Hook performance — single Python call approach",
+      "status": "pass",
+      "steps": [
+        { "action": "Inspect hooks.json for command patterns", "expected": "Each hook uses single python3 .py invocation, not multiple python3 -c calls", "observed": "All 3 hooks use 'python3 ... .py' pattern with single invocation" },
+        { "action": "Time phase-guard.py (avg of 5 runs)", "expected": "< 50ms", "observed": "23.23ms average" },
+        { "action": "Time mission-continue.py (avg of 5 runs)", "expected": "< 50ms", "observed": "23.17ms average" },
+        { "action": "Time mission-reminder.py (avg of 5 runs)", "expected": "< 50ms", "observed": "22.53ms average" }
+      ],
+      "evidence": {
+        "logs": ["polish/infra/VAL-INFRA-013-hook-performance.txt"],
+        "hookCommands": {
+          "phase-guard": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/phase-guard.py\" \"$TOOL_NAME\" \"$TOOL_INPUT\"",
+          "mission-reminder": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/mission-reminder.py\" \"$TOOL_NAME\"",
+          "mission-continue": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/mission-continue.py\" \"$TOOL_NAME\""
+        },
+        "timingMs": {
+          "phase-guard": 23.23,
+          "mission-continue": 23.17,
+          "mission-reminder": 22.53
+        },
+        "allUnder50ms": true,
+        "singleInvocation": true
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 6 assertions: 6 passed, 0 failed. All infrastructure checks confirmed — both version files at 1.0.0, CI covers all test files including mission-reminder and pytest, plugin.json lists all 3 agents, and all hooks use single python3 invocations averaging ~23ms (well under 50ms threshold)."
+}

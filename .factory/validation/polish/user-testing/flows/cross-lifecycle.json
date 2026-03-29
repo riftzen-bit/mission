@@ -1,0 +1,137 @@
+{
+  "groupId": "cross-lifecycle",
+  "testedAt": "2026-03-28T22:47:00Z",
+  "isolation": {
+    "repoRoot": "/home/paul/Projects/mission",
+    "type": "content-check",
+    "tools": "ripgrep + python3",
+    "noServicesNeeded": true
+  },
+  "toolsUsed": ["rg", "bash"],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-001",
+      "title": "Full lifecycle — init creates features.json",
+      "status": "pass",
+      "steps": [
+        { "action": "Count features.json references in SKILL.md", "expected": "≥ 5 references", "observed": "49 references found" },
+        { "action": "Check SKILL.md init creates features.json", "expected": "Init section with features.json creation", "observed": "Line 180: '### Create Features — Initialize features.json (CRITICAL)' with full schema definition" },
+        { "action": "Check orchestrator references features.json for dispatch", "expected": "Orchestrator references features.json", "observed": "27 references in orchestrator.md including dispatch workflow sections" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (content-check)",
+        "grepResults": "SKILL.md: 49 refs to features.json, init at line 180 with schema. orchestrator.md: 27 refs including CREATE (line 34), DISPATCH (line 55), TRACK (line 63), COMPLETE (line 76).",
+        "evidenceFile": "polish/cross-lifecycle/VAL-CROSS-001-evidence.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-002",
+      "title": "Full lifecycle — worker dispatch uses features.json",
+      "status": "pass",
+      "steps": [
+        { "action": "Check orchestrator dispatch reads features.json", "expected": "Orchestrator dispatch workflow references features.json", "observed": "orchestrator.md line 55-62: 'DISPATCH — Assign Workers per Feature' reads features.json, updates status to in-progress, dispatches with feature object" },
+        { "action": "Check worker receives structured assignment", "expected": "Worker references features.json as assignment source", "observed": "worker.md line 13: 'You receive your assignment as a structured feature object from features.json'" },
+        { "action": "Check SKILL.md feature-based dispatch", "expected": "Feature-based dispatch section exists", "observed": "SKILL.md line 224: '### Feature-Based Worker Dispatch' with full dispatch process" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (content-check)",
+        "grepResults": "orchestrator.md: DISPATCH section (line 55-62) reads features.json, sets status, dispatches per feature. worker.md: line 13 receives structured feature object from features.json, line 26 'feature object from features.json is your contract'. SKILL.md: line 224 Feature-Based Worker Dispatch section.",
+        "evidenceFile": "polish/cross-lifecycle/VAL-CROSS-002-evidence.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-003",
+      "title": "Full lifecycle — validator checks per-feature",
+      "status": "pass",
+      "steps": [
+        { "action": "Check validator validates per-feature from features.json", "expected": "Per-feature validation section with features.json reference", "observed": "validator.md line 27: '## Per-Feature Validation from features.json' — validates each feature individually" },
+        { "action": "Check validator reads handoff data", "expected": "Validator reads handoff for verification", "observed": "validator.md line 32: reads handoff object, line 42: tracks results per-feature" },
+        { "action": "Check per-feature results feed back to feature status", "expected": "Assertion results affect feature status/verdict", "observed": "validator.md line 75: 'per-feature assertion table feeds directly into the Verdict. If ANY assertion has FAIL status → the feature fails → Verdict: FAIL'" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (content-check)",
+        "grepResults": "validator.md: Per-Feature Validation section (line 27), reads features.json individually (line 29), reads handoff (line 32), tracks per-feature assertions (line 42), assertion table feeds Verdict (line 75).",
+        "evidenceFile": "polish/cross-lifecycle/VAL-CROSS-003-evidence.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-004",
+      "title": "Full lifecycle — cleanup removes .mission/",
+      "status": "pass",
+      "steps": [
+        { "action": "Check normal completion path has rm -rf .mission/", "expected": "SKILL.md cleanup contains directory deletion", "observed": "SKILL.md line 387: 'rm -rf .mission/' in cleanup step 5. orchestrator.md line 282: same command in Mandatory Cleanup Protocol step 5." },
+        { "action": "Check exit-mission path has rm -rf .mission/", "expected": "exit-mission.md contains directory deletion", "observed": "exit-mission.md line 15: 'Delete .mission/ directory entirely: rm -rf .mission/' and line 64: confirms deletion after deactivation" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (content-check)",
+        "grepResults": "Normal completion: SKILL.md:387, orchestrator.md:282 both have 'rm -rf .mission/'. Exit-mission: exit-mission.md:15,64 both have 'rm -rf .mission/'. CLAUDE.md:136 also references it.",
+        "evidenceFile": "polish/cross-lifecycle/VAL-CROSS-004-evidence.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-005",
+      "title": "Model enforcement config → hooks",
+      "status": "pass",
+      "steps": [
+        { "action": "Check config defines models", "expected": "CLAUDE.md defines models for all 3 roles", "observed": "CLAUDE.md lines 78-80: models.orchestrator=opus, models.worker=opus, models.validator=opus" },
+        { "action": "Check SKILL.md reads config at init", "expected": "SKILL.md reads config including models", "observed": "SKILL.md line 110-115: reads ~/.mission/config.json, models field documented for 'Models for each role (hooks validate and auto-inject on Agent dispatch)'" },
+        { "action": "Check orchestrator uses models in dispatch", "expected": "Orchestrator dispatches with model from config", "observed": "orchestrator.md line 168-169: worker dispatch uses config.models.worker, validator uses config.models.validator" },
+        { "action": "Check hooks validate model on Agent calls", "expected": "phase-guard.py calls validate_model", "observed": "phase-guard.py line 249: calls validate_model(tool_input, state, load_config()) for Agent calls in orchestrator phase" },
+        { "action": "Check engine.py implements validate_model", "expected": "validate_model function with allow/block/inject logic", "observed": "engine.py line 328: def validate_model with state override support, case-insensitive comparison, auto-injection" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (content-check)",
+        "grepResults": "Full chain verified: CLAUDE.md defines models (lines 78-80) → SKILL.md reads config at init (lines 110-115) → orchestrator uses config.models in dispatch (lines 167-169) → phase-guard.py calls validate_model (line 249) → engine.py implements validation (line 328).",
+        "evidenceFile": "polish/cross-lifecycle/VAL-CROSS-005-evidence.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-009",
+      "title": "Feature tracking lifecycle",
+      "status": "pass",
+      "steps": [
+        { "action": "Check SKILL.md defines status transitions", "expected": "Valid transitions documented: pending→in-progress→completed/failed", "observed": "SKILL.md line 205: 'status — One of: pending | in-progress | completed | failed. Valid transitions: pending→in-progress, in-progress→completed, in-progress→failed'" },
+        { "action": "Check orchestrator.md describes status management", "expected": "Status updates at each lifecycle stage", "observed": "orchestrator.md: status=pending at creation (line 45), in-progress at dispatch (line 58), completed/failed after worker returns (line 66), completion gate checks all completed (line 79)" },
+        { "action": "Check engine.py enforces transitions programmatically", "expected": "_VALID_STATUS_TRANSITIONS dict with correct values", "observed": "engine.py lines 381-383: pending→{in-progress}, in-progress→{completed, failed}. validate_status_transition function enforces." }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (content-check)",
+        "grepResults": "SKILL.md: status lifecycle defined (line 205). orchestrator.md: manages transitions — pending at init (line 45), in-progress at dispatch (line 58), completed/failed after worker (line 66), gate at completion (line 79). engine.py: _VALID_STATUS_TRANSITIONS enforces programmatically (lines 381-383).",
+        "evidenceFile": "polish/cross-lifecycle/VAL-CROSS-009-evidence.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-010",
+      "title": "Worker handoff updates feature status",
+      "status": "pass",
+      "steps": [
+        { "action": "Check worker produces structured JSON handoff", "expected": "Worker handoff protocol with filesChanged, summary, testsNeeded", "observed": "worker.md line 84: 'MUST produce a structured JSON handoff' with filesChanged, summary, testsNeeded fields. Line 39: 'You MUST produce a structured JSON handoff when finished'" },
+        { "action": "Check orchestrator reads handoff and updates features.json", "expected": "Orchestrator TRACK section reads handoff and updates status", "observed": "orchestrator.md line 63-67: '### 3. TRACK — Update features.json from Worker Handoffs' — reads handoff, sets status to completed, stores handoff object" },
+        { "action": "Check orchestrator dispatches validator after update", "expected": "Validator dispatch follows handoff processing", "observed": "orchestrator.md line 227-230: '### Phase 3: Process Handoffs and Dispatch Validator' — reads handoffs, updates features.json, then spawns validator" },
+        { "action": "Check SKILL.md documents full chain", "expected": "Handoff → update → validator chain in SKILL.md", "observed": "SKILL.md line 50: 'After dispatching Workers and receiving results → IMMEDIATELY update features.json with handoffs and dispatch Validator'. Line 58: full loop documented." }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "N/A (content-check)",
+        "grepResults": "Worker handoff: worker.md:84 structured JSON handoff protocol. Orchestrator update: orchestrator.md:63-67 TRACK section reads handoff, updates features.json. Validator dispatch: orchestrator.md:227-230 Phase 3 dispatches validator after handoff processing. SKILL.md:50,58 documents full chain.",
+        "evidenceFile": "polish/cross-lifecycle/VAL-CROSS-010-evidence.txt"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 7 assertions: 7 passed, 0 failed. All cross-area lifecycle assertions verified through content-check (ripgrep) against the actual repo files. The full lifecycle chain from init through dispatch, validation, and cleanup is consistently documented across SKILL.md, orchestrator.md, worker.md, validator.md, exit-mission.md, CLAUDE.md, and enforced in hooks/phase-guard.py + hooks/engine.py."
+}
