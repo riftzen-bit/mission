@@ -265,6 +265,16 @@ echo ""
 echo "--- [4] Orchestrator + Agent (STRONGEST) ---"
 
 create_state "true" "orchestrator" "1" "build auth system" "dispatching workers" "relentless"
+# Debug: run once with stderr visible to diagnose Windows failures
+debug_out=$(cd "$TEST_DIR" && python3 "$PROJECT_DIR/hooks/mission-continue.py" "Agent" 2>&1) || true
+if [ -z "$debug_out" ]; then
+  echo "DEBUG: Orchestrator+Agent produced empty output. Stderr check:"
+  cd "$TEST_DIR" && python3 -u "$PROJECT_DIR/hooks/mission-continue.py" "Agent" 2>&1 || echo "DEBUG: exit code $?"
+  echo "DEBUG: state.json content:"
+  cat "$TEST_DIR/.mission/state.json" 2>/dev/null || echo "DEBUG: no state.json"
+  echo "DEBUG: Testing engine import:"
+  cd "$TEST_DIR" && python3 -c "import sys; sys.path.insert(0, '$PROJECT_DIR/hooks'); from engine import find_state_file; print('ENGINE OK, state:', find_state_file())" 2>&1 || echo "DEBUG: engine import failed"
+fi
 assert_output_contains "Orch+Agent → MANDATORY CONTINUATION" "Agent" "MANDATORY CONTINUATION"
 assert_output_contains "Orch+Agent → Phase ORCHESTRATOR" "Agent" "Phase: ORCHESTRATOR"
 assert_output_contains "Orch+Agent → Round: 1" "Agent" "Round: 1"
