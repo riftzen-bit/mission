@@ -22,8 +22,13 @@ Roles are enforced at the tool-call level by three Python hooks sharing a common
 - **`hooks/phase-guard.py`** (PreToolUse) — Blocks forbidden tool calls per phase. Covers Write, Edit, MultiEdit, Agent, and Bash tools.
 - **`hooks/mission-reminder.py`** (PreToolUse) — Injects role-specific anti-drift reminders before every tool call. Feature-aware from `features.json`.
 - **`hooks/mission-continue.py`** (PostToolUse) — Injects continuation reminders after every tool call with strength gradient (STRONGEST for Agent, MEDIUM for Read/Write, LIGHT for Grep/Glob).
+- **`hooks/mission-stop.py`** (Stop) — Blocks Droid from stopping while a mission is active. Prevents the model from ending its response mid-mission. Respects `stop_hook_active` to avoid infinite loops.
+- **`hooks/mission-subagent-stop.py`** (SubagentStop) — Blocks Workers and Validators from stopping prematurely. Ensures structured handoffs/reports are produced before sub-agents return to the Orchestrator.
+- **`hooks/mission-precompact.py`** (PreCompact) — Writes `.mission/checkpoint.md` before context compaction with full recovery state (phase, round, task, feature progress, next action).
+- **`hooks/mission-session-start.py`** (SessionStart) — Injects mission context on session start, resume, or post-compaction recovery via `additionalContext`. Enables automatic mission resumption.
+- **`hooks/mission-prompt.py`** (UserPromptSubmit) — Injects brief mission context (phase, round, current feature) on every user message to maintain awareness.
 
-All hooks are registered in `hooks/hooks.json` and invoked via `python3` directly. The shared `engine.py` module provides single-call state parsing, path canonicalization, model validation, and feature tracking — all using Python stdlib only.
+All 8 hooks across 7 event types are registered in `hooks/hooks.json` and invoked via `python3` directly. The shared `engine.py` module provides single-call state parsing, path canonicalization, model validation, and feature tracking — all using Python stdlib only.
 
 ## Config
 
@@ -98,7 +103,7 @@ The phase lock mechanism guarantees single-role execution:
 
 ## Defense Layers
 
-Eight hook-enforced defense layers in `hooks/phase-guard.py`:
+Ten hook-enforced defense layers in `hooks/phase-guard.py`:
 
 | # | Defense | What it blocks |
 |---|---------|---------------|
@@ -110,6 +115,8 @@ Eight hook-enforced defense layers in `hooks/phase-guard.py`:
 | 6 | Model Enforcement | Wrong model on Agent dispatch; auto-injects if missing |
 | 7 | Phase Lock | Tool calls when `phase ≠ phaseLock.phase` (if `strictPhaseLock` enabled) |
 | 8 | Unknown Phase Block | All tool calls when phase is not in valid set |
+| 9 | Stop Guard | Droid stopping while mission is active (non-complete phase) |
+| 10 | SubagentStop Guard | Workers/Validators stopping without producing handoff/report |
 
 `/exit-mission` bypasses all guards using `endedAt` instead of `completedAt`.
 
@@ -121,6 +128,13 @@ Two anti-drift hooks fire for ALL roles (orchestrator, worker, validator) on eve
 - **PostToolUse (`mission-continue.py`)** — Injects `[MISSION ACTIVE]` with strength gradient. STRONGEST reminder for Agent calls includes full recovery context sufficient to resume after 20+ tool calls or context compaction.
 
 Both hooks read `features.json` and show only the current in-progress feature. Both handle missing/malformed state gracefully and never exit non-zero.
+
+Three additional lifecycle hooks ensure continuity across session boundaries:
+
+- **Stop/SubagentStop** — Block premature stopping for the main session and sub-agents, ensuring the mission loop completes.
+- **PreCompact** — Saves a checkpoint file before context compaction so the model can resume from the exact point.
+- **SessionStart** — Auto-injects mission context when a session starts or resumes, triggering the Resume Protocol.
+- **UserPromptSubmit** — Keeps the model aware of the active mission on every user message.
 
 ## Auto-Continuation
 

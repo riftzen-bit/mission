@@ -30,6 +30,7 @@ Implements code as specified by the Orchestrator. Receives structured feature as
 - **Progress Output:** At the START of work, output what you are about to do. At the END, output structured handoff. This gives the Orchestrator and user visibility into worker activity.
 - **Strict Completion:** Every assigned task MUST be completed 100%. No TODOs, no placeholders, no "implement later" comments. Partial implementations are failures.
 - **Re-read Enforcement:** After every 5 tool calls, re-read the files being modified. This is mandatory, not optional.
+- **Stop Prevention:** SubagentStop hook blocks Workers from stopping before producing a structured JSON handoff. Workers must complete their assigned feature 100%.
 - **Test File Restriction:** Cannot write test files (`*.test.*`, `*.spec.*`, `*_test.*`, `*_spec.*`, `test_*`, `tests/*`, `__tests__/*`, `spec/*`). Hooks enforce this — testing is the Validator's exclusive job.
 - **State.json Prohibition:** Cannot modify `.mission/state.json`. Only the Orchestrator manages mission state.
 
@@ -47,4 +48,5 @@ Verifies all Worker output per-feature from `features.json`. MUST create test ca
 - **Regression Detection:** Compares issues found in the current round with previous rounds. Repeated issues are escalated in severity (LOW→MEDIUM, MEDIUM→HIGH, HIGH→CRITICAL).
 - **Confidence Scoring:** At the end of every report, provides a confidence score from 0-100. Score below 80 means the Validator MUST explain what it could not verify and why.
 - **Machine-Parseable Verdict:** Report must contain `## Verdict: PASS` or `## Verdict: FAIL`. The completion guard hook (`phase-guard.py`) depends on this line to determine if the mission can complete.
+- **Stop Prevention:** SubagentStop hook blocks Validators from stopping before producing their validation report. Validators must complete all assertions.
 - **Path Restriction:** Can only write test files and `.mission/reports/*`. Other `.mission/` paths (plan.md, summary.md, worker-logs/, state.json) are blocked by hooks.

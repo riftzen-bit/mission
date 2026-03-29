@@ -65,13 +65,18 @@ The ruthless quality gate. Validates per-feature, writes tests, runs all checks,
 
 ## Hook Enforcement
 
-Roles are enforced at the tool-call level by a Python hook engine (`hooks/engine.py`) shared across three hooks:
+Roles are enforced at the tool-call level by a Python hook engine (`hooks/engine.py`) shared across eight hooks:
 
 - **`hooks/phase-guard.py`** (PreToolUse) — Blocks forbidden tool calls per phase
 - **`hooks/mission-reminder.py`** (PreToolUse) — Injects role-specific anti-drift reminders with feature context
 - **`hooks/mission-continue.py`** (PostToolUse) — Injects continuation reminders with strength gradient
+- **`hooks/mission-stop.py`** (Stop) — Blocks session from ending while mission is active
+- **`hooks/mission-subagent-stop.py`** (SubagentStop) — Blocks sub-agents from premature stopping
+- **`hooks/mission-precompact.py`** (PreCompact) — Saves checkpoint before context compaction
+- **`hooks/mission-session-start.py`** (SessionStart) — Auto-injects mission context on session start/resume
+- **`hooks/mission-prompt.py`** (UserPromptSubmit) — Injects mission context on every user message
 
-All registered in `hooks/hooks.json` via direct `python3` invocation. Single-process execution per hook (no subprocess chains).
+All 8 hooks across 7 event types registered in `hooks/hooks.json` via direct `python3` invocation. Single-process execution per hook (no subprocess chains).
 
 | Defense | What it blocks |
 |---------|---------------|
@@ -85,6 +90,8 @@ All registered in `hooks/hooks.json` via direct `python3` invocation. Single-pro
 | Unknown Phase Block | All tool calls when phase is not in valid set |
 | Symlink Protection | Path traversal via symlinks (`realpath` resolution) |
 | Phase Transitions | Invalid transitions (e.g., worker → complete) |
+| Stop Guard | Droid stopping while mission active (non-complete phase) |
+| SubagentStop Guard | Workers/Validators stopping without handoff/report |
 
 ## Feature Tracking
 
@@ -132,6 +139,8 @@ Mission Mode runs the entire loop in a single response. The `mission-continue.py
 The `mission-reminder.py` PreToolUse hook injects role-specific anti-drift reminders for ALL roles (not just orchestrator), ensuring context preservation across 20+ tool calls.
 
 If the loop is interrupted, the **Resume Protocol** reads `state.json` and `features.json` to determine exact progress and resumes from the current phase automatically.
+
+Five additional lifecycle hooks ensure continuity: the **Stop** hook blocks the model from ending its response mid-mission, **SubagentStop** prevents sub-agents from quitting early, **PreCompact** saves a checkpoint before context compaction, **SessionStart** auto-injects recovery context on session start, and **UserPromptSubmit** keeps the model mission-aware on every user message.
 
 ## Configuration
 

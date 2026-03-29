@@ -41,6 +41,14 @@ jobs:
         shell: bash
         run: bash tests/mission-reminder.test.sh
 
+      - name: Run mission-stop tests
+        shell: bash
+        run: bash tests/mission-stop.test.sh
+
+      - name: Run mission-lifecycle tests
+        shell: bash
+        run: bash tests/mission-lifecycle.test.sh
+
       - name: Run Python unit tests (pytest)
         shell: bash
         run: python3 -m pytest tests/test_engine.py -v
