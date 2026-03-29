@@ -54,9 +54,12 @@ def _is_state_json(filepath, mission_dir=None):
     if mission_dir:
         expected = os.path.join(mission_dir, "state.json")
         try:
-            return os.path.normcase(os.path.realpath(filepath)) ==                    os.path.normcase(os.path.realpath(expected))
+            if os.path.normcase(os.path.realpath(filepath)) == \
+               os.path.normcase(os.path.realpath(expected)):
+                return True
         except (OSError, ValueError):
             pass
+        # Fall through to basename heuristic on mismatch (Windows paths)
     # Fallback: basename heuristic
     base = os.path.basename(filepath)
     if base != "state.json":
