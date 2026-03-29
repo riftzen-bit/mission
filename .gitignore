@@ -1,3 +1,4 @@
 .omc/
 .mission/
 docs/
+.factory/.venv/

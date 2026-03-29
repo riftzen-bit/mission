@@ -1,8 +1,8 @@
 commands:
-  test: bash tests/phase-guard.test.sh && bash tests/mission-continue.test.sh && bash tests/mission-reminder.test.sh && python3 -m pytest tests/ -v
+  test: bash tests/phase-guard.test.sh && bash tests/mission-continue.test.sh && bash tests/mission-reminder.test.sh && .factory/.venv/bin/python -m pytest tests/ -v
   test-guard: bash tests/phase-guard.test.sh
   test-continue: bash tests/mission-continue.test.sh
   test-reminder: bash tests/mission-reminder.test.sh
-  test-engine: python3 -m pytest tests/test_engine.py -v
+  test-engine: .factory/.venv/bin/python -m pytest tests/test_engine.py -v
   lint: echo "No linter configured"
   typecheck: echo "No typecheck configured (bash/python scripts)"
