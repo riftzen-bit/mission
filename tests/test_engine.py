@@ -27,6 +27,7 @@ from hooks.engine import (
     load_features,
     load_state,
     validate_model,
+    validate_status_transition,
 )
 
 
@@ -782,3 +783,300 @@ class TestDeepMerge:
         base = {"a": {"x": 1}}
         _deep_merge(base, {"a": {"y": 2}})
         assert base == {"a": {"x": 1}}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# validate_status_transition
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestValidateStatusTransition:
+    """Tests for validate_status_transition()."""
+
+    # ── Valid transitions ─────────────────────────────────────────────────────
+
+    @pytest.mark.parametrize(
+        "old_status,new_status",
+        [
+            ("pending", "in-progress"),
+            ("in-progress", "completed"),
+            ("in-progress", "failed"),
+        ],
+    )
+    def test_valid_transitions(self, old_status, new_status):
+        assert validate_status_transition(old_status, new_status) is True
+
+    # ── Invalid transitions ───────────────────────────────────────────────────
+
+    @pytest.mark.parametrize(
+        "old_status,new_status",
+        [
+            ("pending", "completed"),    # Can't skip in-progress
+            ("pending", "failed"),       # Can't fail before starting
+            ("completed", "in-progress"),  # Can't go back
+            ("completed", "pending"),    # Can't go back
+            ("completed", "failed"),     # Can't fail after completing
+            ("failed", "in-progress"),   # Can't restart failed
+            ("failed", "pending"),       # Can't go back
+            ("failed", "completed"),     # Can't complete after failing
+        ],
+    )
+    def test_invalid_transitions(self, old_status, new_status):
+        assert validate_status_transition(old_status, new_status) is False
+
+    # ── Edge cases ────────────────────────────────────────────────────────────
+
+    def test_same_status_is_invalid(self):
+        """Transitioning to same status is not valid."""
+        assert validate_status_transition("pending", "pending") is False
+        assert validate_status_transition("in-progress", "in-progress") is False
+        assert validate_status_transition("completed", "completed") is False
+        assert validate_status_transition("failed", "failed") is False
+
+    def test_unknown_old_status(self):
+        assert validate_status_transition("unknown", "in-progress") is False
+
+    def test_unknown_new_status(self):
+        assert validate_status_transition("pending", "unknown") is False
+
+    def test_empty_string_status(self):
+        assert validate_status_transition("", "in-progress") is False
+        assert validate_status_transition("pending", "") is False
+
+    def test_none_status(self):
+        assert validate_status_transition(None, "in-progress") is False
+        assert validate_status_transition("pending", None) is False
+
+    def test_non_string_status(self):
+        assert validate_status_transition(123, "in-progress") is False
+        assert validate_status_transition("pending", 456) is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# load_features — additional edge cases
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestLoadFeaturesEdgeCases:
+    """Additional edge-case tests for load_features()."""
+
+    def test_missing_optional_fields(self, tmp_path):
+        """Features with missing assignee, dependencies, handoff don't crash."""
+        features = {
+            "features": [
+                {
+                    "id": "f1",
+                    "description": "Minimal feature",
+                    "status": "pending",
+                }
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        result = load_features(str(ff))
+        assert len(result["features"]) == 1
+        f = result["features"][0]
+        assert f["id"] == "f1"
+        # Missing keys should just be absent, not error
+        assert f.get("assignee") is None
+        assert f.get("dependencies") is None
+        assert f.get("handoff") is None
+
+    def test_null_optional_fields(self, tmp_path):
+        """Features with null assignee, dependencies, handoff handled."""
+        features = {
+            "features": [
+                {
+                    "id": "f1",
+                    "description": "Feature",
+                    "status": "pending",
+                    "assignee": None,
+                    "dependencies": [],
+                    "handoff": None,
+                }
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        result = load_features(str(ff))
+        assert len(result["features"]) == 1
+        assert result["features"][0]["assignee"] is None
+        assert result["features"][0]["dependencies"] == []
+        assert result["features"][0]["handoff"] is None
+
+    def test_partial_write_truncated(self, tmp_path):
+        """Truncated JSON (partial write) returns empty features."""
+        ff = tmp_path / "features.json"
+        ff.write_text('{"features": [{"id": "f1", "stat')  # truncated
+        result = load_features(str(ff))
+        assert result == {"features": []}
+
+    def test_duplicate_ids_first_wins_get_current(self, tmp_path):
+        """Duplicate IDs: get_current_feature returns first occurrence."""
+        features = {
+            "features": [
+                {"id": "dup", "description": "First", "status": "in-progress"},
+                {"id": "dup", "description": "Second", "status": "in-progress"},
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        data = load_features(str(ff))
+        result = get_current_feature(data)
+        assert result["description"] == "First"
+
+    def test_duplicate_ids_first_wins_get_next(self, tmp_path):
+        """Duplicate pending IDs: get_next_feature returns first occurrence."""
+        features = {
+            "features": [
+                {"id": "dup", "description": "First", "status": "pending", "dependencies": []},
+                {"id": "dup", "description": "Second", "status": "pending", "dependencies": []},
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        data = load_features(str(ff))
+        result = get_next_feature(data)
+        assert result["description"] == "First"
+
+    def test_features_not_list(self, tmp_path):
+        """features key is not a list → treated as empty."""
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps({"features": "not a list"}))
+        data = load_features(str(ff))
+        assert get_current_feature(data) is None
+        assert get_next_feature(data) is None
+
+    def test_non_dict_feature_entries(self, tmp_path):
+        """Non-dict entries in features list are skipped gracefully."""
+        features = {
+            "features": [
+                "not a dict",
+                42,
+                None,
+                {"id": "real", "status": "in-progress"},
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        data = load_features(str(ff))
+        result = get_current_feature(data)
+        assert result["id"] == "real"
+
+    def test_large_features_list_performance(self, tmp_path):
+        """50 features should parse in under 50ms."""
+        import time
+
+        features = {
+            "features": [
+                {
+                    "id": f"feature-{i}",
+                    "description": f"Feature number {i}",
+                    "status": "pending" if i > 1 else "completed",
+                    "dependencies": [f"feature-{i - 1}"] if i > 1 else [],
+                    "assignee": f"worker-{i % 3}",
+                    "handoff": None,
+                }
+                for i in range(50)
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+
+        start = time.perf_counter()
+        data = load_features(str(ff))
+        current = get_current_feature(data)
+        next_f = get_next_feature(data)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+
+        assert elapsed_ms < 50, f"Features parsing took {elapsed_ms:.1f}ms (> 50ms)"
+        # feature-0 and feature-1 are completed (i <= 1)
+        # feature-2 is pending with dep on feature-1 (completed), so it's next
+        assert next_f["id"] == "feature-2"
+        assert current is None  # no in-progress feature
+
+    def test_all_completed_returns_none(self, tmp_path):
+        """All features completed → no current, no next."""
+        features = {
+            "features": [
+                {"id": "f1", "status": "completed"},
+                {"id": "f2", "status": "completed"},
+                {"id": "f3", "status": "completed"},
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        data = load_features(str(ff))
+        assert get_current_feature(data) is None
+        assert get_next_feature(data) is None
+
+    def test_failed_feature_skipped_by_next(self, tmp_path):
+        """Failed features are skipped by get_next_feature()."""
+        features = {
+            "features": [
+                {"id": "f1", "status": "failed"},
+                {"id": "f2", "status": "pending", "dependencies": []},
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        data = load_features(str(ff))
+        result = get_next_feature(data)
+        assert result["id"] == "f2"
+
+    def test_dependency_on_failed_feature_blocks(self, tmp_path):
+        """Feature depending on a failed feature is blocked (not completed)."""
+        features = {
+            "features": [
+                {"id": "f1", "status": "failed"},
+                {"id": "f2", "status": "pending", "dependencies": ["f1"]},
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        data = load_features(str(ff))
+        result = get_next_feature(data)
+        # f2 is blocked because f1 is failed (not completed)
+        assert result is None
+
+    def test_full_schema_round_trip(self, tmp_path):
+        """All schema fields preserved through load."""
+        features = {
+            "features": [
+                {
+                    "id": "f1",
+                    "description": "Auth module",
+                    "assignee": "worker-1",
+                    "status": "in-progress",
+                    "dependencies": [],
+                    "handoff": {"summary": "WIP", "filesChanged": ["auth.py"]},
+                }
+            ]
+        }
+        ff = tmp_path / "features.json"
+        ff.write_text(json.dumps(features))
+        data = load_features(str(ff))
+        f = data["features"][0]
+        assert f["id"] == "f1"
+        assert f["assignee"] == "worker-1"
+        assert f["handoff"]["summary"] == "WIP"
+        assert f["handoff"]["filesChanged"] == ["auth.py"]
+
+    def test_load_features_with_find_state(self, tmp_path, monkeypatch):
+        """load_features(None) uses find_state_file() to locate features."""
+        mission_dir = tmp_path / ".mission"
+        mission_dir.mkdir()
+        sf = mission_dir / "state.json"
+        sf.write_text(json.dumps({"active": True, "phase": "worker"}))
+        ff = mission_dir / "features.json"
+        ff.write_text(json.dumps({"features": [{"id": "auto", "status": "pending"}]}))
+        monkeypatch.chdir(tmp_path)
+        result = load_features(None)
+        assert len(result["features"]) == 1
+        assert result["features"][0]["id"] == "auto"
+
+    def test_load_features_none_no_state(self, tmp_path, monkeypatch):
+        """load_features(None) with no state file returns empty."""
+        monkeypatch.chdir(tmp_path)
+        result = load_features(None)
+        assert result == {"features": []}

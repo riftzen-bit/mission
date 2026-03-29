@@ -377,6 +377,32 @@ def validate_model(tool_input, state, config):
 
 # ─── Feature tracking ────────────────────────────────────────────────────────
 
+# Valid status transitions (old_status → set of allowed new_statuses)
+_VALID_STATUS_TRANSITIONS = {
+    "pending": {"in-progress"},
+    "in-progress": {"completed", "failed"},
+}
+
+
+def validate_status_transition(old_status, new_status):
+    """Return True if transitioning from *old_status* to *new_status* is valid.
+
+    Valid transitions:
+      pending → in-progress
+      in-progress → completed
+      in-progress → failed
+
+    All other transitions (including same-status) return False.
+    Non-string inputs return False.
+    """
+    if not isinstance(old_status, str) or not isinstance(new_status, str):
+        return False
+    allowed = _VALID_STATUS_TRANSITIONS.get(old_status)
+    if allowed is None:
+        return False
+    return new_status in allowed
+
+
 def get_current_feature(features):
     """Return the first feature with status ``"in-progress"``, or None."""
     if not isinstance(features, dict):
