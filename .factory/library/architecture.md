@@ -34,6 +34,9 @@ The Mission Plugin enforces a 3-role orchestration pattern for Claude Code sessi
 │  ├─ load_state()        — Single-call state parsing      │
 │  ├─ load_config()       — Config with defaults merge     │
 │  ├─ load_features()     — Features.json parsing          │
+│  ├─ get_current_feature() — First in-progress feature    │
+│  ├─ get_next_feature()  — Next unblocked pending feature │
+│  ├─ validate_status_transition() — Status flow validation│
 │  ├─ canonicalize_path() — Symlink + traversal resolution │
 │  ├─ validate_model()    — Agent model enforcement        │
 │  ├─ is_test_file()      — Test file pattern detection    │

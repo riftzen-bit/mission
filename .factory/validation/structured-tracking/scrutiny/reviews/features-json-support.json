@@ -1,0 +1,26 @@
+{
+  "featureId": "features-json-support",
+  "status": "pass",
+  "issues": [
+    {
+      "severity": "non_blocking",
+      "description": "load_features() does not deduplicate features by ID at the parsing layer. The 'duplicate IDs (first wins)' behavior is only an emergent property of get_current_feature() and get_next_feature() iterating in order and returning the first match. If a consumer iterates the features list directly (e.g., counting in-progress features or building a status summary), duplicates would cause incorrect results. The feature spec says 'duplicate IDs (first wins)' which is satisfied by the current approach for the existing helpers, but explicit dedup in load_features() would be more robust."
+    },
+    {
+      "severity": "non_blocking",
+      "description": "validate_status_transition() is defined and tested but is not actually called anywhere in the codebase — neither in engine.py, mission-continue.py, mission-reminder.py, nor phase-guard.py. It exists purely as an exported utility. This is fine for now (other features may use it), but it means the feature's 'validates status transitions' claim is limited to the function existing, not to enforcement."
+    },
+    {
+      "severity": "suggestion",
+      "description": "The performance test (test_large_features_list_performance) uses time.perf_counter() in-test, which is fragile on slow CI runners or under load. Consider marking it with a pytest marker (e.g., @pytest.mark.slow) or using a generous margin. Current 50ms limit vs 0.07ms actual gives plenty of headroom, so this is unlikely to flake in practice."
+    }
+  ],
+  "sharedStateObservations": [
+    {
+      "target": "library",
+      "observation": "architecture.md lists engine.py functions but omits validate_status_transition(), get_current_feature(), and get_next_feature(). Only load_features() is mentioned. The function list in the 'Shared Engine: engine.py' section should be updated to include all three new helpers.",
+      "evidence": ".factory/library/architecture.md lines 27-35 — engine.py function list does not include validate_status_transition, get_current_feature, or get_next_feature"
+    }
+  ],
+  "summary": "Feature fully implements load_features(), get_current_feature(), get_next_feature(), and validate_status_transition() in engine.py. Both mission-continue.py and mission-reminder.py correctly import and use the feature context helpers. All required edge cases (empty array, malformed JSON, duplicate IDs first-wins, partial writes, non-dict entries, dependency blocking, failed-feature blocking) are covered by 31 new tests (52 total feature-related). Performance is excellent at 0.07ms for 50 features. Two non-blocking observations: dedup is implicit rather than explicit, and validate_status_transition() exists but isn't yet called by any hook."
+}

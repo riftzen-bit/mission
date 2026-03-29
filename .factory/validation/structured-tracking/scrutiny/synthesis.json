@@ -1,0 +1,60 @@
+{
+  "milestone": "structured-tracking",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bash tests/phase-guard.test.sh && bash tests/mission-continue.test.sh && bash tests/mission-reminder.test.sh && .factory/.venv/bin/python -m pytest tests/ -v",
+      "exitCode": 0,
+      "details": "phase-guard: 207/207, mission-continue: 143/143, mission-reminder: 120/120, pytest: 166/166 — total 636 tests passed"
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "echo \"No typecheck configured (bash/python scripts)\"",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "echo \"No linter configured\"",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Updated architecture.md to include get_current_feature(), get_next_feature(), and validate_status_transition() in the engine.py function list. These were added by the features-json-support feature but not documented.",
+      "sourceFeature": "features-json-support"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Add a convention note clarifying hook naming: entry points registered in hooks.json are .sh bash wrappers (phase-guard.sh, mission-continue.sh, mission-reminder.sh), while the actual implementation is in .py files. Documentation should use the registered entry point name (.sh) when referring to hook configuration, and .py when referring to implementation details.",
+      "evidence": "commands/enter-mission.md references hooks as .py files, CLAUDE.md references them as .sh files, hooks.json registers .sh wrappers. Inconsistency found across commands-update-v1 and existing documentation.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "AGENTS.md documents 'plan.md replaced by features.json + mission-brief.md' in v0.5.0→v1.0 migration notes — consistent, no gap",
+      "reason": "already-documented"
+    },
+    {
+      "observation": "Worker skill (content-worker) was followed correctly per transcript — no skill gap",
+      "reason": "ambiguous — content-worker skill file not found on disk, but this is a Factory platform skill, not a project skill"
+    },
+    {
+      "observation": ".mission/ path convention is consistent across all agent files",
+      "reason": "already-documented"
+    }
+  ],
+  "previousRound": null
+}

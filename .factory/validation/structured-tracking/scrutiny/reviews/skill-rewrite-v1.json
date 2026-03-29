@@ -1,0 +1,27 @@
+{
+  "featureId": "skill-rewrite-v1",
+  "reviewedAt": "2026-03-29T05:30:00.000Z",
+  "commitId": "4a8b1c4",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "issues": [],
+  "codeReview": {
+    "summary": "SKILL.md v1.0 rewrite is comprehensive and well-structured. All 9 required criteria are met: features.json is referenced 49 times with a complete 6-field schema definition (lines 184-210), compaction recovery protocol has 5 explicit recovery steps (lines 62-76), anti-drift enforcement includes 10 failure signatures + 6 self-check questions + 7-rule mandatory continuation protocol (lines 10-59), structured completion gate checks feature statuses as primary gate (lines 341-356), feature-based worker dispatch has a 5-step process (lines 224-253), state.json init template includes features reference replacing old plan field (line 134), resume protocol has an 8-row state machine with a dedicated features.json column (lines 84-93), and mission-brief.md is referenced 3 times as human-readable companion. The diff shows 206 insertions and 131 deletions — a clean rewrite that replaces plan.md references with features.json throughout, adds new sections (Compaction Recovery, Mandatory Continuation, Feature-Based Worker Dispatch), and updates hook references from .sh to .py. No dead code, no inconsistencies with other agent files.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "target": "AGENTS.md",
+      "observation": "SKILL.md references hooks as mission-reminder.py and mission-continue.py, and the defense layers table lists 8 defenses including Model Enforcement, Phase Lock, and Unknown Phase Block. The mission AGENTS.md documents the v0.5.0 to v1.0 migration note that bash hooks are replaced by Python hooks, which is consistent. No gap found — this is well-aligned.",
+      "evidence": "SKILL.md lines 409-411 reference .py hooks; mission AGENTS.md 'v0.5.0 → v1.0 Migration Notes' section confirms this."
+    },
+    {
+      "target": "skills",
+      "observation": "The content-worker skill file was not found at .factory/skills/content-worker/SKILL.md. The worker used the content-worker skill (per features.json skillName field) but the skill doesn't exist on disk. This may indicate the skill was removed or never persisted, or is defined elsewhere.",
+      "evidence": "cat .factory/skills/content-worker/SKILL.md returned 'Skill file not found'. features.json shows skillName: 'content-worker' for this feature."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "SKILL.md v1.0 rewrite passes all 9 review criteria. features.json referenced 49 times with full schema, compaction recovery with 5 steps, anti-drift with failure signatures + self-check + mandatory continuation, structured completion gate checking feature statuses, feature-based worker dispatch, state.json init with features reference, 8-row resume state machine, and mission-brief.md referenced as companion. Clean, thorough implementation with no blocking issues."
+}
