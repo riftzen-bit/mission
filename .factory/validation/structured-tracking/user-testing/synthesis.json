@@ -1,0 +1,32 @@
+{
+  "milestone": "structured-tracking",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 38,
+    "passed": 38,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-AGENT-001", "VAL-AGENT-002", "VAL-AGENT-003", "VAL-AGENT-004", "VAL-AGENT-005",
+    "VAL-AGENT-006", "VAL-AGENT-007", "VAL-AGENT-008", "VAL-AGENT-009", "VAL-AGENT-010",
+    "VAL-FEAT-001", "VAL-FEAT-002", "VAL-FEAT-003", "VAL-FEAT-004", "VAL-FEAT-005",
+    "VAL-FEAT-006", "VAL-FEAT-007", "VAL-FEAT-008", "VAL-FEAT-009", "VAL-FEAT-010",
+    "VAL-FEAT-011", "VAL-FEAT-012", "VAL-FEAT-013", "VAL-FEAT-014", "VAL-FEAT-015",
+    "VAL-FEAT-016",
+    "VAL-SKILL-001", "VAL-SKILL-002", "VAL-SKILL-003", "VAL-SKILL-004", "VAL-SKILL-005",
+    "VAL-SKILL-006", "VAL-SKILL-007", "VAL-SKILL-008", "VAL-SKILL-009", "VAL-SKILL-010",
+    "VAL-SKILL-011", "VAL-SKILL-012"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [
+    {
+      "target": "user-testing.md",
+      "description": "Added Flow Validator Guidance: CLI section with content-check and CLI execution testing approaches, isolation rules",
+      "source": "setup"
+    }
+  ],
+  "previousRound": null
+}

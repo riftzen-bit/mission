@@ -1,0 +1,261 @@
+{
+  "groupId": "features",
+  "testedAt": "2026-03-28T12:00:00Z",
+  "isolation": {
+    "repoRoot": "/home/paul/Projects/mission",
+    "tempDirs": "per-test isolated temp directories",
+    "hooks": "hooks/engine.py, hooks/phase-guard.py, hooks/mission-continue.py, hooks/mission-reminder.py"
+  },
+  "toolsUsed": ["python3", "bash"],
+  "assertions": [
+    {
+      "id": "VAL-FEAT-001",
+      "title": "Valid schema accepted by hooks",
+      "status": "pass",
+      "steps": [
+        { "action": "Create temp dir with state.json (active, orchestrator) and features.json (3 features: completed, in-progress, pending)", "expected": "Files created", "observed": "Files created" },
+        { "action": "Run mission-continue.py Agent", "expected": "Exit 0, output references in-progress feature F-002", "observed": "Exit 0, stdout contains F-002 with description" },
+        { "action": "Run mission-reminder.py Agent", "expected": "Exit 0, output references in-progress feature F-002", "observed": "Exit 0, stdout contains F-002 with description" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks exit 0. mission-continue: [MISSION ACTIVE — MANDATORY CONTINUATION] with Feature: F-002. mission-reminder: [MISSION SKILL ACTIVE — DO NOT DEVIATE] with Current Feature: F-002"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-002",
+      "title": "Missing optional fields handled",
+      "status": "pass",
+      "steps": [
+        { "action": "Create features.json with assignee=null, dependencies=[], handoff=null", "expected": "No errors", "observed": "No errors" },
+        { "action": "Run mission-continue.py and mission-reminder.py", "expected": "Exit 0, no KeyError or Traceback", "observed": "Exit 0, clean output, no errors" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks exit 0 with valid output. No KeyError, no Traceback in stderr."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-003",
+      "title": "Status transitions validated",
+      "status": "pass",
+      "steps": [
+        { "action": "Import validate_status_transition from engine.py", "expected": "Function available", "observed": "Function imported" },
+        { "action": "Test valid: pending→in-progress", "expected": "True", "observed": "True" },
+        { "action": "Test valid: in-progress→completed", "expected": "True", "observed": "True" },
+        { "action": "Test valid: in-progress→failed", "expected": "True", "observed": "True" },
+        { "action": "Test invalid: pending→completed", "expected": "False", "observed": "False" },
+        { "action": "Test invalid: completed→in-progress", "expected": "False", "observed": "False" },
+        { "action": "Test invalid: failed→in-progress", "expected": "False", "observed": "False" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "All 6 transition checks returned correct True/False values"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-004",
+      "title": "First pending feature is next",
+      "status": "pass",
+      "steps": [
+        { "action": "Create features: [completed-A, pending-B, pending-C]", "expected": "get_next_feature returns B", "observed": "Returns {id: B}" },
+        { "action": "Call get_next_feature()", "expected": "Feature B (first pending)", "observed": "Feature B returned" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "get_next_feature returned {\"id\": \"B\", \"status\": \"pending\", \"dependencies\": []}"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-005",
+      "title": "Single in-progress constraint",
+      "status": "pass",
+      "steps": [
+        { "action": "Create features with two in-progress: F-FIRST and F-SECOND", "expected": "Hooks reference only F-FIRST", "observed": "Only F-FIRST in output" },
+        { "action": "Run mission-continue.py Agent", "expected": "F-FIRST present, F-SECOND absent", "observed": "F-FIRST present, F-SECOND absent" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Output contains 'Feature: F-FIRST — First in-progress'. F-SECOND does not appear."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-006",
+      "title": "Hooks extract correct current feature",
+      "status": "pass",
+      "steps": [
+        { "action": "Create 5 features: 2 completed (C-1, C-2), 1 in-progress (IP-3), 2 pending (P-4, P-5)", "expected": "Only IP-3 in output", "observed": "Only IP-3 in output" },
+        { "action": "Run both hooks", "expected": "IP-3 present, others absent", "observed": "IP-3 present in both, C-1/C-2/P-4/P-5 absent" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "mission-continue: 'Feature: IP-3 — The active one'. mission-reminder: 'Feature: IP-3 — The active one'. No other feature IDs in output."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-007",
+      "title": "Worker assignment — assignee matching",
+      "status": "pass",
+      "steps": [
+        { "action": "Create feature F-007 with assignee=worker-1, phase=worker", "expected": "Hooks include feature context", "observed": "F-007 referenced in output" },
+        { "action": "Run both hooks", "expected": "Feature F-007 in output", "observed": "F-007 in both hook outputs" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks reference F-007. Worker phase reminder includes feature assignment context."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-008",
+      "title": "Structured handoff field",
+      "status": "pass",
+      "steps": [
+        { "action": "Create feature F-008 with populated handoff object, phase=validator", "expected": "Validator reminder references feature", "observed": "F-008 in output" },
+        { "action": "Run mission-reminder.py", "expected": "F-008 referenced", "observed": "Output contains F-008 — Feature with handoff" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Validator reminder: '[MISSION SKILL ACTIVE] | Phase: VALIDATOR | Feature: F-008 — Feature with handoff | Directive: Validate...'"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-009",
+      "title": "Empty features array handled",
+      "status": "pass",
+      "steps": [
+        { "action": "Create features.json with {\"features\": []}", "expected": "Exit 0, valid output, no crash", "observed": "Exit 0, valid output" },
+        { "action": "Run both hooks", "expected": "No Traceback, non-empty output", "observed": "Clean output for both hooks" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks exit 0. mission-reminder shows 'Current Feature: none'. No Traceback."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-010",
+      "title": "Malformed features.json handled",
+      "status": "pass",
+      "steps": [
+        { "action": "Write '{broken json ~~~' to features.json", "expected": "Exit 0, no traceback", "observed": "Exit 0, no traceback" },
+        { "action": "Run both hooks", "expected": "Graceful fallback", "observed": "Both hooks produce valid output without feature context" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks exit 0. Fall back to non-feature-aware behavior (Current Feature: none). No Traceback in stderr."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-011",
+      "title": "Dependency blocking",
+      "status": "pass",
+      "steps": [
+        { "action": "Create features: A(completed), B(pending, dep:C), C(pending, dep:A), D(pending, dep:A+C)", "expected": "get_next_feature returns C (B blocked by unmet dep C)", "observed": "Returns C" },
+        { "action": "Call get_next_feature()", "expected": "Feature C", "observed": "Feature C returned (deps met: A is completed)" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "get_next_feature returned {\"id\": \"C\", \"status\": \"pending\", \"dependencies\": [\"A\"]}"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-012",
+      "title": "All-completed state",
+      "status": "pass",
+      "steps": [
+        { "action": "Create features with all status=completed", "expected": "No current feature, hooks still work", "observed": "Exit 0, 'Current Feature: none'" },
+        { "action": "Run both hooks", "expected": "No feature as current", "observed": "mission-reminder shows 'Current Feature: none'" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks exit 0. No feature shown as current. mission-reminder: 'Current Feature: none'."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-013",
+      "title": "Duplicate IDs — deterministic behavior",
+      "status": "pass",
+      "steps": [
+        { "action": "Create two features with id=DUP (First DUP, Second DUP)", "expected": "First occurrence used", "observed": "get_current_feature returns First DUP" },
+        { "action": "Test get_next_feature with duplicate pending IDs", "expected": "No crash, returns first", "observed": "Returns first pending occurrence" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "get_current_feature: {\"id\": \"DUP\", \"description\": \"First DUP\"}. No crash with duplicates."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-014",
+      "title": "Large list performance",
+      "status": "pass",
+      "steps": [
+        { "action": "Create 50 features (25 completed, 1 in-progress, 24 pending)", "expected": "Hooks complete under 50ms", "observed": "Average 16.0ms across 5 runs" },
+        { "action": "Time 5 hook invocations", "expected": "< 50ms average", "observed": "avg=16.0ms, min=15.4ms, max=16.6ms" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "50 features, 5 runs: avg=16.0ms, min=15.4ms, max=16.6ms — well under 50ms threshold"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-015",
+      "title": "State/features inconsistency handled",
+      "status": "pass",
+      "steps": [
+        { "action": "Set phase=worker with only pending features (no in-progress)", "expected": "Exit 0, graceful fallback", "observed": "Exit 0, valid output without feature context" },
+        { "action": "Run both hooks", "expected": "No crash", "observed": "mission-continue: 'Phase: WORKER | Round: 1 — Continue your assigned task.' mission-reminder: 'Feature: none'" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks exit 0. Worker reminders still produced. Feature shown as 'none'. No Traceback."
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FEAT-016",
+      "title": "Partial features.json read safety",
+      "status": "pass",
+      "steps": [
+        { "action": "Write truncated JSON to features.json: '{\"features\": [{\"id\": \"F-001\", \"desc'", "expected": "Exit 0, no traceback", "observed": "Exit 0, no traceback" },
+        { "action": "Run both hooks", "expected": "Graceful fallback to non-feature-aware behavior", "observed": "Both produce valid output, fall back gracefully" }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": "none",
+        "hookOutput": "Both hooks exit 0. Truncated JSON falls back to empty features. Current Feature: none. No Traceback."
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 16 assertions: 16 passed, 0 failed, 0 blocked. All feature tracking assertions verified — schema parsing, status transitions, dependency resolution, error handling, performance, and edge cases all working correctly."
+}

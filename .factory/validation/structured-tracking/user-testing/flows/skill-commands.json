@@ -1,0 +1,81 @@
+{
+  "flowId": "skill-commands",
+  "testedAt": "2026-03-28T12:00:00Z",
+  "isolation": {
+    "repoRoot": "/home/paul/Projects/mission",
+    "accessMode": "read-only",
+    "skillFile": "skills/enter-mission/SKILL.md",
+    "commandFiles": [
+      "commands/enter-mission.md",
+      "commands/exit-mission.md",
+      "commands/mission-config.md",
+      "commands/mission-status.md"
+    ]
+  },
+  "toolsUsed": ["rg"],
+  "assertions": {
+    "VAL-SKILL-001": {
+      "status": "pass",
+      "evidence": "rg -c 'features\\.json' SKILL.md → 49 occurrences (≥5 required). Schema section present: '**features.json Schema:**' with full JSON schema definition including id, description, assignee, status, dependencies, handoff fields.",
+      "reason": "features.json referenced 49 times (well above ≥5 threshold) and contains a detailed schema definition section with field types and descriptions."
+    },
+    "VAL-SKILL-002": {
+      "status": "pass",
+      "evidence": "SKILL.md contains '## Compaction Recovery Protocol' section with 5 recovery steps: 1) Re-read state.json, 2) Re-read features.json, 3) Re-read mission-brief.md, 4) Determine next action from Resume Protocol state machine, 5) Execute immediately. References both state.json and features.json explicitly.",
+      "reason": "Compaction recovery section present with recovery steps referencing both state.json and features.json."
+    },
+    "VAL-SKILL-003": {
+      "status": "pass",
+      "evidence": "All four elements found: 1) '## Anti-Drift Enforcement' section (line 7), 2) '### Failure Signatures' section listing 10+ failure patterns, 3) '### Self-Check Protocol' with 6 self-check questions, 4) '### Mandatory Continuation Protocol' with 7 rules. Also has '### Anti-Drift Hooks' table.",
+      "reason": "All four required elements present: anti-drift section, failure signatures, self-check protocol, and mandatory continuation."
+    },
+    "VAL-SKILL-004": {
+      "status": "pass",
+      "evidence": "SKILL.md contains '## Structured Completion Gate' that checks: 'ALL features in features.json have status: completed — no pending, in-progress, or failed features remain'. Gate explicitly checks feature statuses and states 'Do NOT proceed to cleanup until every feature in features.json has status: completed'.",
+      "reason": "Structured completion gate checks feature statuses from features.json with explicit status requirements."
+    },
+    "VAL-SKILL-005": {
+      "status": "pass",
+      "evidence": "SKILL.md contains '### Feature-Based Worker Dispatch' section stating 'Workers are dispatched per feature from features.json. This ensures structured tracking, clear ownership, and deterministic progress measurement.' Includes dispatch process: select ready features, update features.json status to in-progress, dispatch Worker per feature via Agent tool with structured feature object.",
+      "reason": "Per-feature dispatch language present with detailed dispatch process from features.json."
+    },
+    "VAL-SKILL-006": {
+      "status": "pass",
+      "evidence": "State.json template in SKILL.md contains '\"features\": \".mission/features.json\"' field. Also features.json schema has '\"features\": [...]' array. The state template explicitly includes a features reference field pointing to .mission/features.json.",
+      "reason": "Features-related field present in state.json template: '\"features\": \".mission/features.json\"'."
+    },
+    "VAL-SKILL-007": {
+      "status": "pass",
+      "evidence": "commands/enter-mission.md has YAML frontmatter: '---\\nname: enter-mission\\ndescription: \"Enter Mission Mode — strict 3-role orchestration (Orchestrator, Worker, Validator)\"\\n---'. References enter-mission skill: 'Invoke the `enter-mission` skill to activate Mission Mode' and 'the enter-mission skill takes over' and 'the enter-mission skill enforces mandatory continuation'.",
+      "reason": "YAML frontmatter present with name: enter-mission, and skill is referenced multiple times in the body."
+    },
+    "VAL-SKILL-008": {
+      "status": "pass",
+      "evidence": "commands/exit-mission.md uses endedAt (line 13: 'record \"endedAt\" timestamp'), explicitly states 'endedAt field (NOT completedAt)', and has 'always works' guarantee: 'Emergency stop — ALWAYS works' (title and line 7). completedAt is mentioned only to explain the distinction, not used for exit. endedAt = force exit bypasses ALL cleanup guards.",
+      "reason": "endedAt present for exit, completedAt not used for exit mechanism, 'always works' guarantee prominently stated."
+    },
+    "VAL-SKILL-009": {
+      "status": "pass",
+      "evidence": "commands/mission-config.md supports all three roles: orchestrator (lines: '/mission-config orchestrator=sonnet', 'models.orchestrator', 'Orchestrator | opus | Planning, delegation, review'), worker (lines: '/mission-config worker=haiku', 'models.worker', 'Worker | opus | Code implementation'), validator (lines: '/mission-config validator=opus', 'models.validator', 'Validator | opus | Testing, quality review'). References config.json: 'Manages global Mission Mode configuration stored at ~/.mission/config.json'.",
+      "reason": "All three roles present in model configuration context with config.json reference."
+    },
+    "VAL-SKILL-010": {
+      "status": "pass",
+      "evidence": "commands/mission-status.md displays per-feature status from features.json: 'Reads .mission/state.json and .mission/features.json to display real-time mission progress', '## Feature Progress Display', 'The feature progress section reads features.json and displays each feature with: Feature ID, Status (completed/in-progress/pending/failed), Description'. Shows status icons and summary line with count per status.",
+      "reason": "Features progress display language present with per-feature status from features.json."
+    },
+    "VAL-SKILL-011": {
+      "status": "pass",
+      "evidence": "SKILL.md '## Resume Protocol' contains state machine table with 8 rows checking feature statuses for re-dispatch decisions. Row examples: 'orchestrator | features.json exists, no features dispatched | All features pending | Dispatch workers for next ready features from features.json', 'worker | All assigned workers completed | All dispatched features completed | Update features.json, transition to validator'. Step 2: 'Read .mission/features.json to determine feature statuses and current progress'.",
+      "reason": "Resume protocol state machine uses features.json for re-dispatch decisions across all phases."
+    },
+    "VAL-SKILL-012": {
+      "status": "pass",
+      "evidence": "SKILL.md references mission-brief.md 3 times: 1) 'Re-read .mission/mission-brief.md (if exists) — Refresh the human-readable mission overview' (compaction recovery step 3), 2) 'Also create .mission/mission-brief.md as a human-readable companion document. While features.json is the machine-tracked source of truth for feature statuses and handoffs, mission-brief.md provides the high-level context, rationale, and approach in prose form for human readers and for context after compaction recovery', 3) 'Update mission-brief.md if the mission scope has changed' (user intervention).",
+      "reason": "mission-brief.md referenced as human-readable companion to features.json."
+    }
+  },
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 12 assertions: 12 passed, 0 failed. All skill and command files contain the required content for v1.0 structured tracking features."
+}

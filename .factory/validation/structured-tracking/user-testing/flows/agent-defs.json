@@ -1,0 +1,70 @@
+{
+  "flowId": "agent-defs",
+  "groupId": "agent-defs",
+  "testedAt": "2026-03-28T12:00:00Z",
+  "isolation": {
+    "repoRoot": "/home/paul/Projects/mission",
+    "mode": "read-only",
+    "agentFiles": [
+      "agents/orchestrator.md",
+      "agents/worker.md",
+      "agents/validator.md"
+    ]
+  },
+  "toolsUsed": ["rg"],
+  "assertions": {
+    "VAL-AGENT-001": {
+      "status": "pass",
+      "evidence": "rg -c 'features\\.json' agents/orchestrator.md returned 27. Requirement: ≥ 3 occurrences. 27 ≥ 3.",
+      "reason": "features.json is referenced 27 times in orchestrator.md, covering init (CREATE section), dispatch (DISPATCH section), and tracking (TRACK/COMPLETE sections)."
+    },
+    "VAL-AGENT-002": {
+      "status": "pass",
+      "evidence": "Line 3: 'NEVER writes code' in description frontmatter. Line 9: 'FORBIDDEN from writing any source code'. Line 13: 'FORBIDDEN from writing code in source files'.",
+      "reason": "Both 'NEVER writes code' and 'FORBIDDEN from writing' language found in agents/orchestrator.md at lines 3, 9, and 13."
+    },
+    "VAL-AGENT-003": {
+      "status": "pass",
+      "evidence": "Lines 16, 76, 92, 235, 250 contain 'completion gate' references. Line 250: '## Completion Gate (CRITICAL)' section. Lines 79-80 check feature statuses: 'Every feature status must be completed', 'No feature has status = pending, in-progress, or failed'.",
+      "reason": "Completion gate section exists at line 250 with explicit feature-level status checks from features.json (lines 79-80)."
+    },
+    "VAL-AGENT-004": {
+      "status": "pass",
+      "evidence": "rg -c 'features\\.json' agents/worker.md returned 4. Line 11: '## Structured Feature Assignment'. Line 13: 'structured feature object from features.json'. Line 26: 'feature object from features.json is your contract'. Line 62: 'feature object from features.json'.",
+      "reason": "features.json referenced 4 times in worker.md with structured assignment language including 'Structured Feature Assignment' section header and JSON object example."
+    },
+    "VAL-AGENT-005": {
+      "status": "pass",
+      "evidence": "Line 39: 'structured JSON handoff'. Line 57: 'structured JSON handoff'. Line 82: '## Structured JSON Handoff Protocol (CRITICAL)'. Line 84: 'structured JSON handoff. This replaces free-form markdown logs'. Line 106: 'JSON handoff'.",
+      "reason": "Multiple references to 'structured JSON handoff' found (lines 39, 57, 82, 84, 106). Line 84 explicitly states it 'replaces free-form markdown logs'."
+    },
+    "VAL-AGENT-006": {
+      "status": "pass",
+      "evidence": "Line 9: 'FORBIDDEN from running tests'. Line 31: 'MUST NOT run test commands (npm test, pytest, go test, etc.)'. Line 38: 'cannot run tests'. Line 40: 'MUST NOT write test files'. Line 79: 'Do NOT write tests'.",
+      "reason": "Test prohibition language preserved at multiple locations (lines 9, 31, 38, 40, 79) with explicit hook enforcement."
+    },
+    "VAL-AGENT-007": {
+      "status": "pass",
+      "evidence": "Line 32: 'You MUST NOT modify `.mission/state.json`. Hooks will block you.'",
+      "reason": "state.json write prohibition explicitly present at line 32 of agents/worker.md with hook enforcement noted."
+    },
+    "VAL-AGENT-008": {
+      "status": "pass",
+      "evidence": "rg -c 'features\\.json' agents/validator.md returned 5. Per-feature language found at lines 27, 42, 53, 75, 104, 127, 133, 154, 164, 191, 223, 271. Section '## Per-Feature Validation from features.json' at line 27.",
+      "reason": "features.json referenced 5 times in validator.md. Extensive per-feature validation language including dedicated section 'Per-Feature Validation from features.json' and per-feature assertion tables."
+    },
+    "VAL-AGENT-009": {
+      "status": "pass",
+      "evidence": "Line 42: 'per-feature assertion tracking'. Line 53: 'per-feature assertion tracking'. Line 55: '## Structured Assertion Tracking'. Line 57: 'track assertions with explicit pass/fail status'. Line 72: 'Status: PASS or FAIL — binary'. Table template with columns: #, Assertion, Status, Evidence.",
+      "reason": "Structured Assertion Tracking section exists (line 55) with explicit pass/fail per-assertion status tracking format including table template."
+    },
+    "VAL-AGENT-010": {
+      "status": "pass",
+      "evidence": "'Verdict: PASS' found at lines 52, 107, 116, 123, 127, 132, 221. 'Verdict: FAIL' found at lines 52, 75, 120, 127, 132. Both verdict strings present in machine-parseable format.",
+      "reason": "Both 'Verdict: PASS' and 'Verdict: FAIL' strings present in agents/validator.md. Section at line 116/120 shows both as markdown headings. Line 52 describes them as 'machine-parseable'."
+    }
+  },
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 10 assertions: 10 passed, 0 failed. All agent definition files contain the required v1.0 structured tracking content (features.json workflow, structured handoffs, per-feature validation, machine-parseable verdicts, and all preserved prohibitions)."
+}
