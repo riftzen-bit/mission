@@ -40,19 +40,22 @@ if [ -z "$STATE_FILE" ]; then
   exit 0
 fi
 
-# Fast grep check: skip if not active
-ACTIVE=$(grep -oP '"active"\s*:\s*\K[a-z]+' "$STATE_FILE" 2>/dev/null | head -1 || echo "false")
+# Fast check: skip if not active
+# Note: uses sed instead of grep -oP for macOS/Windows portability
+ACTIVE=$(sed -n 's/.*"active"[[:space:]]*:[[:space:]]*\([a-z][a-z]*\).*/\1/p' "$STATE_FILE" 2>/dev/null | head -1)
 if [ "$ACTIVE" != "true" ]; then
   exit 0
 fi
 
-# Fast phase check: route by phase
-PHASE=$(grep -oP '"phase"\s*:\s*"\K[^"]+' "$STATE_FILE" 2>/dev/null | head -1 || echo "unknown")
+# Phase check: route by phase
+PHASE=$(sed -n 's/.*"phase"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$STATE_FILE" 2>/dev/null | head -1)
+PHASE="${PHASE:-unknown}"
 
 # Workers and validators: minimal reminder only after Agent calls
 if [ "$PHASE" != "orchestrator" ]; then
   if [ "$TOOL_NAME" = "Agent" ]; then
-    ROUND=$(grep -oP '"round"\s*:\s*\K[0-9]+' "$STATE_FILE" 2>/dev/null | head -1 || echo "1")
+    ROUND=$(sed -n 's/.*"round"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$STATE_FILE" 2>/dev/null | head -1)
+    ROUND="${ROUND:-1}"
     echo "[MISSION ACTIVE] Phase: ${PHASE} | Round: $ROUND — Continue your assigned task."
   fi
   exit 0

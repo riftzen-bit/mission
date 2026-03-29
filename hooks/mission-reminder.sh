@@ -42,15 +42,16 @@ if ! grep -q '"active"' "$STATE_FILE" 2>/dev/null; then
   exit 0
 fi
 
-# Fast phase check via grep: only remind orchestrator
+# Fast phase check via sed: only remind orchestrator
 # Workers and validators have focused prompts — reminders would confuse them
-PHASE=$(grep -oP '"phase"\s*:\s*"\K[^"]+' "$STATE_FILE" 2>/dev/null | head -1 || echo "")
+# Note: uses sed instead of grep -oP for macOS/Windows portability
+PHASE=$(sed -n 's/.*"phase"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$STATE_FILE" 2>/dev/null | head -1)
 if [ "$PHASE" != "orchestrator" ]; then
   exit 0
 fi
 
 # Verify actually active (grep "active" above matches the key name, not value)
-ACTIVE=$(grep -oP '"active"\s*:\s*\K[a-z]+' "$STATE_FILE" 2>/dev/null | head -1 || echo "false")
+ACTIVE=$(sed -n 's/.*"active"[[:space:]]*:[[:space:]]*\([a-z][a-z]*\).*/\1/p' "$STATE_FILE" 2>/dev/null | head -1)
 if [ "$ACTIVE" != "true" ]; then
   exit 0
 fi
