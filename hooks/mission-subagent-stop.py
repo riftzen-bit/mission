@@ -71,7 +71,7 @@ def _feature_id(state_path):
 
 def _block(reason):
     """Print a block decision as JSON and exit 0."""
-    print(json.dumps({"decision": "block", "reason": reason}))
+    print(json.dumps({"decision": "block", "reason": reason}), flush=True)
     sys.exit(0)
 
 

@@ -118,7 +118,7 @@ def _output_orchestrator(mission_dir, round_n, task, feature_str, current_action
             'Directive: "Your research MUST lead to creating .mission/features.json, '
             'then dispatching Workers. DO NOT DEVIATE."'
         )
-        print(" | ".join(parts))
+        print(" | ".join(parts), flush=True)
     else:
         # Plan or features exists — dispatch/loop phase
         parts = [
@@ -134,7 +134,7 @@ def _output_orchestrator(mission_dir, round_n, task, feature_str, current_action
             'Directive: "Follow the mission loop: dispatch Workers → validate → fix → complete. '
             'DO NOT DEVIATE."'
         )
-        print(" | ".join(parts))
+        print(" | ".join(parts), flush=True)
 
 
 def _output_worker(round_n, task, feature_str):
@@ -148,7 +148,7 @@ def _output_worker(round_n, task, feature_str):
         'Directive: "Complete your assigned feature. Produce structured JSON handoff '
         'when done. DO NOT write test files."',
     ]
-    print(" | ".join(parts))
+    print(" | ".join(parts), flush=True)
 
 
 def _output_validator(round_n, task, feature_str):
@@ -162,7 +162,7 @@ def _output_validator(round_n, task, feature_str):
         'Directive: "Validate the completed feature. Write tests and report to '
         '.mission/reports/. DO NOT modify source files."',
     ]
-    print(" | ".join(parts))
+    print(" | ".join(parts), flush=True)
 
 
 if __name__ == "__main__":

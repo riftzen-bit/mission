@@ -158,7 +158,7 @@ def block(description, guidance=""):
         msg = f'BLOCK: [MISSION GUARD] Phase "{_PHASE}" — {description}. {guidance}.{lock_info}'
     else:
         msg = f'BLOCK: [MISSION GUARD] Phase "{_PHASE}" — {description}.{lock_info}'
-    print(msg, file=sys.stderr)
+    print(msg, file=sys.stderr, flush=True)
     sys.exit(1)
 
 
@@ -191,9 +191,9 @@ def main():
     # ── Step 1: Accept 2 args ────────────────────────────────────────────────
     if len(sys.argv) < 3:
         if len(sys.argv) < 2:
-            print("phase-guard.py: missing TOOL_NAME and TOOL_INPUT args", file=sys.stderr)
+            print("phase-guard.py: missing TOOL_NAME and TOOL_INPUT args", file=sys.stderr, flush=True)
         else:
-            print("phase-guard.py: missing TOOL_INPUT arg", file=sys.stderr)
+            print("phase-guard.py: missing TOOL_INPUT arg", file=sys.stderr, flush=True)
         sys.exit(0)  # Don't block on missing args
 
     tool_name = sys.argv[1]
@@ -248,11 +248,11 @@ def main():
     if tool_name == "Agent" and _PHASE == "orchestrator":
         action, msg, modified = validate_model(tool_input, state, load_config())
         if action == "block":
-            print(msg, file=sys.stderr)
+            print(msg, file=sys.stderr, flush=True)
             sys.exit(1)
         elif action == "inject":
             # Print the modified input as JSON for the caller to pick up
-            print(json.dumps(modified))
+            print(json.dumps(modified), flush=True)
             sys.exit(0)
         # action == "allow" → continue
 

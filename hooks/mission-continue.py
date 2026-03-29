@@ -262,7 +262,7 @@ def _main_inner():
         # Missing phase → treat as unknown; only output for Agent
         if tool_name == "Agent":
             round_n = state.get("round", 1)
-            print(f"[MISSION ACTIVE] Phase: unknown | Round: {round_n} — Continue your assigned task.")
+            print(f"[MISSION ACTIVE] Phase: unknown | Round: {round_n} — Continue your assigned task.", flush=True)
         sys.exit(0)
 
     # ── Step 4: Load features ────────────────────────────────────────────────
@@ -283,37 +283,37 @@ def _main_inner():
 
     if phase == "orchestrator":
         if strength == "strongest":
-            print(_orchestrator_strongest(state, feature))
+            print(_orchestrator_strongest(state, feature), flush=True)
         elif strength == "medium":
-            print(_orchestrator_medium(state, feature, tool_name))
+            print(_orchestrator_medium(state, feature, tool_name), flush=True)
         else:
-            print(_orchestrator_light(state, feature))
+            print(_orchestrator_light(state, feature), flush=True)
 
     elif phase == "worker":
         if strength == "strongest":
-            print(_worker_strong(state, feature))
+            print(_worker_strong(state, feature), flush=True)
         elif strength == "medium":
-            print(_worker_medium(state, feature))
+            print(_worker_medium(state, feature), flush=True)
         else:
-            print(_worker_light(state, feature))
+            print(_worker_light(state, feature), flush=True)
 
     elif phase == "validator":
         if strength == "strongest":
-            print(_validator_strong(state, feature))
+            print(_validator_strong(state, feature), flush=True)
         elif strength == "medium":
-            print(_validator_medium(state, feature))
+            print(_validator_medium(state, feature), flush=True)
         else:
-            print(_validator_light(state, feature))
+            print(_validator_light(state, feature), flush=True)
 
     else:
         # Unknown phase → light reminder if active
         round_n = state.get("round", 1)
         if tool_name == "Agent":
-            print(f"[MISSION ACTIVE] Phase: {phase} | Round: {round_n} — Continue your assigned task.")
+            print(f"[MISSION ACTIVE] Phase: {phase} | Round: {round_n} — Continue your assigned task.", flush=True)
         elif strength == "medium":
-            print(f"[MISSION ACTIVE] Phase: {phase} | Round: {round_n} — Stay on the mission loop.")
+            print(f"[MISSION ACTIVE] Phase: {phase} | Round: {round_n} — Stay on the mission loop.", flush=True)
         else:
-            print(f"[MISSION ACTIVE] Phase: {phase} | Round: {round_n} — Follow the skill.")
+            print(f"[MISSION ACTIVE] Phase: {phase} | Round: {round_n} — Follow the skill.", flush=True)
 
     sys.exit(0)
 

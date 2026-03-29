@@ -93,7 +93,7 @@ def _main_inner():
             "additionalContext": additional_context,
         }
     }
-    print(json.dumps(response))
+    print(json.dumps(response), flush=True)
     sys.exit(0)
 
 
