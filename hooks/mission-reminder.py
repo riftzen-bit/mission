@@ -131,7 +131,7 @@ def _output_orchestrator(mission_dir, round_n, task, feature_str, current_action
         if current_action:
             parts.append(f"Current Action: {current_action}")
         parts.append(
-            'Directive: "Follow the mission loop: dispatch Workers → validate → fix → complete. '
+            'Directive: "Follow the mission loop: dispatch Workers -> validate -> fix -> complete. '
             'DO NOT DEVIATE."'
         )
         print(" | ".join(parts), flush=True)

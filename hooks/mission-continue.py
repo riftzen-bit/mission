@@ -125,16 +125,16 @@ def _orchestrator_strongest(state, feature):
     )
     lines.append("NEXT STEPS (pick the one that applies):")
     lines.append(
-        '- If workers returned → transition to validator. Update state.json phase to "validator" → Dispatch validator agent'
+        '- If workers returned -> transition to validator. Update state.json phase to "validator" -> Dispatch validator agent'
     )
     lines.append(
-        f"- If validator returned → Read .mission/reports/round-{round_n}.md → Decide: fix or complete"
+        f"- If validator returned -> Read .mission/reports/round-{round_n}.md -> Decide: fix or complete"
     )
     lines.append(
-        "- Issues found → Increment round → Dispatch fix workers → Then validator again"
+        "- Issues found -> Increment round -> Dispatch fix workers -> Then validator again"
     )
     lines.append(
-        "- All pass → Run completion gate → Cleanup → Output summary"
+        "- All pass -> Run completion gate -> Cleanup -> Output summary"
     )
     lines.append("DO NOT STOP. TAKE THE NEXT ACTION NOW.")
     lines.append("[END MANDATORY CONTINUATION]")
