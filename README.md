@@ -1,16 +1,16 @@
-# Mission Plugin for Claude Code
+# Mission Plugin for Claude Code v1.0
 
-A strict 3-role orchestration system that turns Claude Code into a disciplined engineering team. The **Orchestrator** plans, **Workers** code, and the **Validator** tests — each role isolated by hard hook enforcement at the tool-call level.
+A strict 3-role orchestration system that turns Claude Code into a disciplined engineering team. The **Orchestrator** plans, **Workers** code, and the **Validator** tests — each role isolated by hard hook enforcement at the tool-call level. Features structured tracking via `features.json`, model enforcement, and Factory-grade anti-drift protection.
 
 ## Why Mission?
 
 Claude Code is powerful, but without structure it can skip tests, mix concerns, or lose track of quality. Mission Mode forces a disciplined loop:
 
 ```
-Plan → Implement → Validate → Fix → Validate → ... → Done
+Plan → Create features.json → Dispatch Workers per feature → Validate → Fix → Validate → ... → Done
 ```
 
-No role can do another role's job. Workers can't run tests. Validators can't write source code. The Orchestrator can't touch files outside `.mission/`. All enforced by PreToolUse hooks — not just prompts.
+No role can do another role's job. Workers can't run tests. Validators can't write source code. The Orchestrator can't touch files outside `.mission/`. All enforced by Python PreToolUse hooks — not just prompts.
 
 ## Install
 
@@ -31,58 +31,89 @@ No role can do another role's job. Workers can't run tests. Validators can't wri
 
 That's it. Mission Mode activates and runs the full loop automatically:
 
-1. **Orchestrator** reads your codebase, creates a plan
-2. **Workers** implement code in parallel (independent tasks)
-3. **Validator** writes tests for every function, runs all checks, generates a report
+1. **Orchestrator** reads your codebase, creates `features.json` with structured feature list
+2. **Workers** implement code per feature (parallel for independent features)
+3. **Validator** validates per-feature with structured assertion tracking, generates report
 4. If issues found → Workers fix → Validator re-verifies
-5. Loop until 100% pass → cleanup → done
+5. Loop until all features pass → cleanup → done
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `/enter-mission [task]` | Start Mission Mode (or resume if interrupted) |
-| `/exit-mission` | Emergency stop — always works, no matter what |
-| `/mission-status` | Dashboard: phase, round, workers, issue trend |
-| `/mission-config` | View or change model/persistence settings |
+| `/exit-mission` | Emergency stop — always works, bypasses all guards via `endedAt` |
+| `/mission-status` | Dashboard: phase, round, per-feature progress from `features.json` |
+| `/mission-config` | View or set models for orchestrator, worker, validator + persistence |
 
 ## Roles
 
 ### Orchestrator
 Plans, delegates, reviews. Spawns Workers and Validators via the Agent tool.
-- **CAN**: Read any file, write to `.mission/`, spawn agents
+- **CAN**: Read any file, write to `.mission/`, create/update `features.json`, spawn agents
 - **CANNOT**: Write or edit source code (hooks block it)
 
 ### Worker
-Implements code exactly as assigned. No more, no less.
+Implements code exactly as assigned per feature from `features.json`. Produces structured JSON handoffs.
 - **CAN**: Read/write source files, run build commands
 - **CANNOT**: Run tests, write test files, modify `.mission/state.json`, spawn Validators
 
 ### Validator
-The ruthless quality gate. Writes tests, runs all checks, finds bugs.
-- **CAN**: Write test files, write reports, run any command
+The ruthless quality gate. Validates per-feature, writes tests, runs all checks, finds bugs.
+- **CAN**: Write test files, write `.mission/reports/*`, run any command
 - **CANNOT**: Modify source files, modify mission state, spawn Workers
 
 ## Hook Enforcement
 
-Roles aren't just suggested — they're enforced at the tool-call level by `hooks/phase-guard.sh`:
+Roles are enforced at the tool-call level by a Python hook engine (`hooks/engine.py`) shared across three hooks:
+
+- **`hooks/phase-guard.py`** (PreToolUse) — Blocks forbidden tool calls per phase
+- **`hooks/mission-reminder.py`** (PreToolUse) — Injects role-specific anti-drift reminders with feature context
+- **`hooks/mission-continue.py`** (PostToolUse) — Injects continuation reminders with strength gradient
+
+All registered in `hooks/hooks.json` via direct `python3` invocation. Single-process execution per hook (no subprocess chains).
 
 | Defense | What it blocks |
 |---------|---------------|
 | Phase Lock | Tool calls that don't match the current phase |
-| Completion Guard | Completing without a validator report |
-| Cleanup Guard | Deactivating without summary + clean worker-logs |
-| Worker Test Block | Workers writing `*.test.*`, `*.spec.*`, `tests/*` |
-| Validator Path Lock | Validators writing outside `.mission/reports/*` |
-| Anti-Premature Stop | Completing in relentless mode when report says FAIL |
+| Completion Guard | Completing without a validator report (relentless: requires `Verdict: PASS`) |
+| Cleanup Guard | Deactivating without `summary.md` + clean worker-logs |
+| Worker Test Block | Workers writing `*.test.*`, `*.spec.*`, `*_test.*`, `tests/*`, `__tests__/*` |
+| Validator Path Lock | Validators writing to `.mission/` except `.mission/reports/*` |
+| Anti-Premature Stop | Completion in relentless mode when report says FAIL |
+| Model Enforcement | Wrong model on Agent dispatch (auto-injects if missing) |
+| Unknown Phase Block | All tool calls when phase is not in valid set |
 | Symlink Protection | Path traversal via symlinks (`realpath` resolution) |
 | Phase Transitions | Invalid transitions (e.g., worker → complete) |
+
+## Feature Tracking
+
+The Orchestrator creates `.mission/features.json` as the structured tracking system:
+
+```json
+{
+  "features": [
+    {
+      "id": "feature-slug",
+      "description": "What needs to be done",
+      "assignee": null,
+      "status": "pending",
+      "dependencies": [],
+      "handoff": null
+    }
+  ]
+}
+```
+
+Status lifecycle: `pending` → `in-progress` → `completed` | `failed`
+
+Workers are dispatched per feature. Handoffs are structured JSON (`{filesChanged, summary, testsNeeded}`). Feature statuses are the primary completion gate.
 
 ## Persistence Modes
 
 | Mode | Behavior |
 |------|----------|
-| `relentless` (default) | Never stops until ALL pass or you run `/exit-mission` |
+| `relentless` (default) | Never stops until ALL features pass or you run `/exit-mission` |
 | `standard` | Respects round/time limits |
 | `cautious` | Stops at first critical issue |
 
@@ -90,11 +121,17 @@ Roles aren't just suggested — they're enforced at the tool-call level by `hook
 /mission-config persistence=relentless
 ```
 
-## Auto-Continuation
+## Auto-Continuation & Context Preservation
 
-Mission Mode is designed to run the entire loop in a single response. A `PostToolUse` hook (`mission-continue.sh`) fires after every Agent call, reminding Claude to continue instead of stopping.
+Mission Mode runs the entire loop in a single response. The `mission-continue.py` PostToolUse hook fires after every tool call with a strength gradient:
+- **STRONGEST** (Agent + orchestrator) — Full recovery context from `features.json`
+- **STRONG** (Agent + worker/validator) — Phase and feature context
+- **MEDIUM** (Read/Write/Edit/Bash) — Phase and round
+- **LIGHT** (Grep/Glob) — Minimal reminder
 
-If the loop is interrupted (e.g., context limits), the **Resume Protocol** auto-detects the active mission on the next message and resumes from exactly where it stopped. No manual intervention needed.
+The `mission-reminder.py` PreToolUse hook injects role-specific anti-drift reminders for ALL roles (not just orchestrator), ensuring context preservation across 20+ tool calls.
+
+If the loop is interrupted, the **Resume Protocol** reads `state.json` and `features.json` to determine exact progress and resumes from the current phase automatically.
 
 ## Configuration
 
@@ -105,7 +142,7 @@ If the loop is interrupted (e.g., context limits), the **Resume Protocol** auto-
 /mission-config strictPhaseLock=true
 ```
 
-Global config is stored at `~/.mission/config.json`. Per-mission state lives in `.mission/state.json` (auto-cleaned on completion).
+Global config is stored at `~/.mission/config.json`. Per-mission state lives in `.mission/state.json` (auto-cleaned on completion). Per-mission model overrides in `state.json` take precedence over global config.
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -121,7 +158,7 @@ Global config is stored at `~/.mission/config.json`. Per-mission state lives in 
 ## Requirements
 
 - Claude Code CLI
-- Python 3 (for JSON parsing in hooks)
+- Python 3 (for hook engine — stdlib only, no pip packages)
 
 ## License
 
