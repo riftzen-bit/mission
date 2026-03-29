@@ -1,0 +1,60 @@
+{
+  "milestone": "polish",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "bash tests/phase-guard.test.sh && bash tests/mission-continue.test.sh && bash tests/mission-reminder.test.sh && .factory/.venv/bin/python -m pytest tests/ -v",
+      "exitCode": 0,
+      "details": "phase-guard: 207/207 PASS, mission-continue: 143/143 PASS, mission-reminder: 120/120 PASS, test_engine: 166/166 PASS — total 636 tests"
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "echo \"No typecheck configured (bash/python scripts)\"",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "echo \"No linter configured\"",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "nonBlockingIssues": [
+    {
+      "featureId": "infrastructure-polish",
+      "severity": "non-blocking",
+      "description": "CI 'Install pytest' step missing 'shell: bash' — inconsistent with other steps but functionally correct on all 3 OS targets.",
+      "file": ".github/workflows/ci.yml"
+    },
+    {
+      "featureId": "cross-area-integration",
+      "severity": "non-blocking",
+      "description": "README.md defense table shows 10 defenses while CLAUDE.md says 'Eight hook-enforced defense layers'. The extra 2 (Symlink Protection, Phase Transitions) are real defenses but aren't numbered in CLAUDE.md/SKILL.md. Minor documentation alignment opportunity.",
+      "file": "README.md"
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Remove stale migration note that says old bash hooks (.sh) should be preserved as reference. The .sh files no longer exist in the repo — hooks.json exclusively uses .py hooks now.",
+      "evidence": "Mission AGENTS.md v0.5.0 → v1.0 Migration Notes says 'Old bash hooks (phase-guard.sh, mission-continue.sh, mission-reminder.sh) should be preserved as reference but hooks.json must point to new Python hooks'. However, no .sh hook files remain in hooks/ directory.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [
+    {
+      "observation": "services.yaml uses '.factory/.venv/bin/python -m pytest' while CI uses 'python3 -m pytest' — different invocation paths.",
+      "reason": "By design. Local dev uses project-local venv (ensuring pytest is installed), CI uses actions/setup-python which provides python3 in PATH. Both approaches are correct for their respective environments."
+    }
+  ],
+  "previousRound": null
+}

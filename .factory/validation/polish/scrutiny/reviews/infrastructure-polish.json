@@ -1,0 +1,35 @@
+{
+  "featureId": "infrastructure-polish",
+  "reviewedAt": "2026-03-29T05:35:00.000Z",
+  "commitId": "eb33415",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All 5 validation assertions pass. plugin.json bumped to 1.0.0 with all 3 agents listed. package.json bumped to 1.0.0. marketplace.json bumped to 1.0.0. hooks.json updated from bash to Python references with expanded matchers (MultiEdit in phase-guard, MultiEdit+TodoWrite in reminder and continue). CI workflow correctly adds mission-reminder.test.sh and pytest steps with pip install preceding pytest usage. Diff is clean — 5 files changed, 20 insertions, 9 deletions, all targeted and correct.",
+    "issues": [
+      {
+        "file": ".github/workflows/ci.yml",
+        "line": 25,
+        "severity": "non-blocking",
+        "description": "The 'Install pytest' step is missing 'shell: bash' unlike all other run steps. On Windows runners the default shell is PowerShell; pip install still works there, but it's inconsistent with the pattern used by every other step in the workflow."
+      }
+    ]
+  },
+  "issues": [
+    {
+      "severity": "non-blocking",
+      "description": "CI 'Install pytest' step missing 'shell: bash' — inconsistent with other steps but functionally correct on all 3 OS targets.",
+      "file": ".github/workflows/ci.yml"
+    }
+  ],
+  "sharedStateObservations": [
+    {
+      "area": "services",
+      "observation": "services.yaml test command uses '.factory/.venv/bin/python -m pytest' but CI workflow uses 'python3 -m pytest'. These are different invocation paths. The CI approach is correct for GitHub Actions (uses actions/setup-python), but it means local dev (via services.yaml) and CI diverge slightly in how pytest is found.",
+      "evidence": ".factory/services.yaml line 'test-engine: .factory/.venv/bin/python -m pytest tests/test_engine.py -v' vs .github/workflows/ci.yml line 46 'python3 -m pytest tests/test_engine.py -v'"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Infrastructure polish feature passes all 5 validation assertions (VAL-INFRA-001, 002, 005, 006, 012). Version bumps to 1.0.0 across plugin.json, package.json, and marketplace.json are correct. hooks.json properly migrated from bash to Python references with expanded tool matchers. CI workflow correctly adds mission-reminder.test.sh and pytest steps. One non-blocking style inconsistency in CI (missing shell: bash on pip install step). One shared-state observation about pytest invocation path divergence between services.yaml and CI."
+}
